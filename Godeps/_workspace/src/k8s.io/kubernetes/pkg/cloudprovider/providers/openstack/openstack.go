@@ -399,6 +399,11 @@ func (os *OpenStack) ProviderName() string {
 	return ProviderName
 }
 
+// ScrubDNS filters DNS settings for pods.
+func (os *OpenStack) ScrubDNS(nameservers, searches []string) (nsOut, srchOut []string) {
+	return nameservers, searches
+}
+
 type LoadBalancer struct {
 	network *gophercloud.ServiceClient
 	compute *gophercloud.ServiceClient
@@ -906,7 +911,7 @@ func (os *OpenStack) getComputeIDbyHostname(cClient *gophercloud.ServiceClient) 
 		glog.Errorf("Found no servers in the region")
 		return "", errors.New("Found no servers in the region")
 	}
-	glog.V(4).Infof("found servers: %v", srvs)
+	glog.V(4).Infof("Found servers: %v", srvs)
 
 	for _, srvname := range srvs {
 		server, err := getServerByName(cClient, srvname)
@@ -914,7 +919,7 @@ func (os *OpenStack) getComputeIDbyHostname(cClient *gophercloud.ServiceClient) 
 			return "", err
 		} else {
 			if (server.Metadata["hostname"] != nil && server.Metadata["hostname"] == hostname) || (len(server.Name) > 0 && server.Name == hostname) {
-				glog.V(4).Infof("found server: %s with host :%s", server.Name, hostname)
+				glog.V(4).Infof("Found server: %s with host :%s", server.Name, hostname)
 				return server.ID, nil
 			}
 		}

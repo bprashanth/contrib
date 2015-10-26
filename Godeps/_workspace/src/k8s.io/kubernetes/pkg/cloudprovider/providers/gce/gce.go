@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package gce_cloud
+package gce
 
 import (
 	"fmt"
@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/cloudprovider"
-	"k8s.io/kubernetes/pkg/util/errors"
+	utilerrors "k8s.io/kubernetes/pkg/util/errors"
 	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/wait"
 
@@ -199,6 +200,20 @@ func (gce *GCECloud) Clusters() (cloudprovider.Clusters, bool) {
 // ProviderName returns the cloud provider ID.
 func (gce *GCECloud) ProviderName() string {
 	return ProviderName
+}
+
+// Known-useless DNS search path.
+var uselessDNSSearchRE = regexp.MustCompile(`^[0-9]+.google.internal.$`)
+
+// ScrubDNS filters DNS settings for pods.
+func (gce *GCECloud) ScrubDNS(nameservers, searches []string) (nsOut, srchOut []string) {
+	// GCE has too many search paths by default. Filter the ones we know are useless.
+	for _, s := range searches {
+		if !uselessDNSSearchRE.MatchString(s) {
+			srchOut = append(srchOut, s)
+		}
+	}
+	return nameservers, srchOut
 }
 
 // TCPLoadBalancer returns an implementation of TCPLoadBalancer for Google Compute Engine.
@@ -805,7 +820,7 @@ func (gce *GCECloud) UpdateTCPLoadBalancer(name, region string, hosts []string) 
 
 // EnsureTCPLoadBalancerDeleted is an implementation of TCPLoadBalancer.EnsureTCPLoadBalancerDeleted.
 func (gce *GCECloud) EnsureTCPLoadBalancerDeleted(name, region string) error {
-	err := errors.AggregateGoroutines(
+	err := utilerrors.AggregateGoroutines(
 		func() error { return gce.deleteFirewall(name, region) },
 		// Even though we don't hold on to static IPs for load balancers, it's
 		// possible that EnsureTCPLoadBalancer left one around in a failed
@@ -824,7 +839,7 @@ func (gce *GCECloud) EnsureTCPLoadBalancerDeleted(name, region string) error {
 		},
 	)
 	if err != nil {
-		return errors.Flatten(err)
+		return utilerrors.Flatten(err)
 	}
 	return nil
 }
