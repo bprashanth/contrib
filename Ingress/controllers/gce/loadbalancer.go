@@ -130,7 +130,13 @@ func (l *L7s) create(name string) (*L7, error) {
 }
 
 func lbName(key string) string {
-	return strings.Replace(key, "/", "-", -1)
+	// TODO: Pipe the clusterName through, for now it saves code churn to just
+	// grab it globally, especially since we haven't decided how to handle
+	// namespace conflicts in the Ubernetes context.
+	if *clusterName == "" {
+		return strings.Replace(key, "/", "-", -1)
+	}
+	return fmt.Sprintf("%v-%v", strings.Replace(key, "/", "-", -1), *clusterName)
 }
 
 // Get returns the loadbalancer by name.

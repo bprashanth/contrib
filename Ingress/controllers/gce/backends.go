@@ -40,7 +40,13 @@ func portKey(port int64) string {
 }
 
 func beName(port int64) string {
-	return fmt.Sprintf("%v-%d", backendPrefix, port)
+	// TODO: Pipe the clusterName through, for now it saves code churn to just
+	// grab it globally, especially since we haven't decided how to handle
+	// namespace conflicts in the Ubernetes context.
+	if *clusterName == "" {
+		return fmt.Sprintf("%v-%d", backendPrefix, port)
+	}
+	return fmt.Sprintf("%v-%d-%v", backendPrefix, port, *clusterName)
 }
 
 // NewBackendPool returns a new backend pool.

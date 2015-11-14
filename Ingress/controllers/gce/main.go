@@ -56,7 +56,7 @@ var (
 		printed to stdout and no changes are made to your cluster. This flag is for
 		testing.`)
 
-	clusterName = flags.String("gce-cluster-name", "default-cluster-name",
+	clusterName = flags.String("gce-cluster-name", "",
 		`Optional, used to tag cluster wide, shared loadbalancer resources such
 		 as instance groups. Use this flag if you'd like to continue using the
 		 same resources across a pod restart. Note that this does not need to
@@ -148,19 +148,18 @@ func main() {
 			kubeClient, err = client.New(config)
 		}
 	}
-	// Wait for the default backend Service. There's no pretty way to do this.
-	parts := strings.Split(*defaultSvc, "/")
-	if len(parts) != 2 {
-		glog.Fatalf("Default backend should take the form namespace/name: %v",
-			*defaultSvc)
-	}
-	defaultBackendNodePort, err := getNodePort(kubeClient, parts[0], parts[1])
-	if err != nil {
-		glog.Fatalf("Could not configure default backend %v: %v",
-			*defaultSvc, err)
-	}
-
 	if *proxyUrl == "" && *inCluster {
+		// Wait for the default backend Service. There's no pretty way to do this.
+		parts := strings.Split(*defaultSvc, "/")
+		if len(parts) != 2 {
+			glog.Fatalf("Default backend should take the form namespace/name: %v",
+				*defaultSvc)
+		}
+		defaultBackendNodePort, err := getNodePort(kubeClient, parts[0], parts[1])
+		if err != nil {
+			glog.Fatalf("Could not configure default backend %v: %v",
+				*defaultSvc, err)
+		}
 		// Create cluster manager
 		clusterManager, err = NewClusterManager(
 			*clusterName, defaultBackendNodePort, *healthCheckPath)
