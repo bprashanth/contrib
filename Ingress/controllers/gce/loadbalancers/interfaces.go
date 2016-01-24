@@ -43,6 +43,11 @@ type LoadBalancers interface {
 	CreateTargetHttpProxy(urlMap *compute.UrlMap, name string) (*compute.TargetHttpProxy, error)
 	DeleteTargetHttpProxy(name string) error
 	SetUrlMapForTargetHttpProxy(proxy *compute.TargetHttpProxy, urlMap *compute.UrlMap) error
+
+	// Static IP
+	AllocateGlobalStaticIP(name, IPAddress string) (*compute.Address, error)
+	GetGlobalStaticIP(name string) (*compute.Address, error)
+	DeleteGlobalStaticIP(name string) error
 }
 
 // LoadBalancerPool is an interface to manage the cloud resources associated

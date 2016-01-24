@@ -40,6 +40,7 @@ type FakeLoadBalancers struct {
 	Fw   []*compute.ForwardingRule
 	Um   []*compute.UrlMap
 	Tp   []*compute.TargetHttpProxy
+	IP   []*compute.Address
 	name string
 }
 
@@ -265,6 +266,36 @@ func (f *FakeLoadBalancers) CheckURLMap(t *testing.T, l7 *L7, expectedMap map[st
 	if len(expectedMap) != 0 {
 		t.Fatalf("Untranslated entries %+v", expectedMap)
 	}
+}
+
+// Static IP fakes
+func (f *FakeLoadBalancers) AllocateGlobalStaticIP(name, IPAddress string) (*compute.Address, error) {
+	ip := &compute.Address{
+		Name:    name,
+		Address: IPAddress,
+	}
+	f.IP = append(f.IP, ip)
+	return ip, nil
+}
+
+func (f *FakeLoadBalancers) GetGlobalStaticIP(name string) (*compute.Address, error) {
+	for i := range f.IP {
+		if f.IP[i].Name == name {
+			return f.IP[i], nil
+		}
+	}
+	return nil, fmt.Errorf("Static IP %v not found", name)
+}
+
+func (f *FakeLoadBalancers) DeleteGlobalStaticIP(name string) error {
+	ip := []*compute.Address{}
+	for i := range f.IP {
+		if f.IP[i].Name != name {
+			ip = append(ip, f.IP[i])
+		}
+	}
+	f.IP = ip
+	return nil
 }
 
 // NewFakeLoadBalancers creates a fake cloud client. Name is the name
