@@ -42,20 +42,21 @@ func NewFakeClusterManager(clusterName string) *fakeClusterManager {
 	fakeBackends := backends.NewFakeBackendServices()
 	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
 	fakeHCs := healthchecks.NewFakeHealthChecks()
-
+	namer := utils.Namer{clusterName}
 	nodePool := instances.NewNodePool(fakeIGs)
-	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/")
+	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/", namer)
 	backendPool := backends.NewBackendPool(
 		fakeBackends,
-		healthChecker, nodePool)
+		healthChecker, nodePool, namer)
 	l7Pool := loadbalancers.NewLoadBalancerPool(
 		fakeLbs,
 		// TODO: change this
 		backendPool,
 		utils.TestDefaultBeNodePort,
+		namer,
 	)
 	cm := &ClusterManager{
-		ClusterName:  clusterName,
+		ClusterNamer: namer,
 		instancePool: nodePool,
 		backendPool:  backendPool,
 		l7Pool:       l7Pool,

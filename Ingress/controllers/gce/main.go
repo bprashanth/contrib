@@ -67,7 +67,7 @@ var (
 		printed to stdout and no changes are made to your cluster. This flag is for
 		testing.`)
 
-	clusterName = flags.String("cluster-uid", "",
+	clusterName = flags.String("cluster-uid", controller.DefaultClusterUID,
 		`Optional, used to tag cluster wide, shared loadbalancer resources such
 		 as instance groups. Use this flag if you'd like to continue using the
 		 same resources across a pod restart. Note that this does not need to
@@ -197,7 +197,7 @@ func main() {
 	if err != nil {
 		glog.Fatalf("%v", err)
 	}
-	glog.Infof("Created lbc %+v", clusterManager.ClusterName)
+	glog.Infof("Created lbc %+v", clusterManager.ClusterNamer.ClusterName)
 	go registerHandlers(lbc)
 	go handleSigterm(lbc, *deleteAllOnQuit)
 

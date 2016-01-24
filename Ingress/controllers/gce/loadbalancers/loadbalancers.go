@@ -74,8 +74,8 @@ type L7s struct {
 func NewLoadBalancerPool(
 	cloud LoadBalancers,
 	defaultBackendPool backends.BackendPool,
-	defaultBackendNodePort int64) LoadBalancerPool {
-	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort, utils.Namer{}}
+	defaultBackendNodePort int64, namer utils.Namer) LoadBalancerPool {
+	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort, namer}
 }
 
 func (l *L7s) create(name string) (*L7, error) {

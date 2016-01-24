@@ -23,6 +23,7 @@ import (
 	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
 	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/contrib/Ingress/controllers/gce/loadbalancers"
+	"k8s.io/contrib/Ingress/controllers/gce/utils"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	gce "k8s.io/kubernetes/pkg/cloudprovider/providers/gce"
 )
@@ -57,7 +58,7 @@ const (
 
 // ClusterManager manages cluster resource pools.
 type ClusterManager struct {
-	ClusterName            string
+	ClusterNamer           utils.Namer
 	defaultBackendNodePort int64
 	instancePool           instances.NodePool
 	backendPool            backends.BackendPool
@@ -137,10 +138,6 @@ func defaultInstanceGroupName(clusterName string) string {
 	return fmt.Sprintf("%v-%v", instanceGroupPrefix, clusterName)
 }
 
-func defaultBackendName(clusterName string) string {
-	return fmt.Sprintf("%v-%v", backendPrefix, clusterName)
-}
-
 // NewClusterManager creates a cluster manager for shared resources.
 // - name: is the name used to tag cluster wide shared resources. This is the
 //   string passed to glbc via --gce-cluster-name.
@@ -157,16 +154,16 @@ func NewClusterManager(
 		return nil, err
 	}
 	cloud := cloudInterface.(*gce.GCECloud)
-	cluster := ClusterManager{ClusterName: name}
+	cluster := ClusterManager{ClusterNamer: utils.Namer{name}}
 	cluster.instancePool = instances.NewNodePool(cloud)
-	healthChecker := healthchecks.NewHealthChecker(cloud, defaultHealthCheckPath)
+	healthChecker := healthchecks.NewHealthChecker(cloud, defaultHealthCheckPath, cluster.ClusterNamer)
 	cluster.backendPool = backends.NewBackendPool(
-		cloud, healthChecker, cluster.instancePool)
-	defaultBackendHealthChecker := healthchecks.NewHealthChecker(cloud, "/healthz")
+		cloud, healthChecker, cluster.instancePool, cluster.ClusterNamer)
+	defaultBackendHealthChecker := healthchecks.NewHealthChecker(cloud, "/healthz", cluster.ClusterNamer)
 	defaultBackendPool := backends.NewBackendPool(
-		cloud, defaultBackendHealthChecker, cluster.instancePool)
+		cloud, defaultBackendHealthChecker, cluster.instancePool, cluster.ClusterNamer)
 	cluster.defaultBackendNodePort = defaultBackendNodePort
 	cluster.l7Pool = loadbalancers.NewLoadBalancerPool(
-		cloud, defaultBackendPool, defaultBackendNodePort)
+		cloud, defaultBackendPool, defaultBackendNodePort, cluster.ClusterNamer)
 	return &cluster, nil
 }

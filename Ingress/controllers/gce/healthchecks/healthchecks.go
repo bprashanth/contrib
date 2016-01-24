@@ -34,8 +34,8 @@ type HealthChecks struct {
 // NewHealthChecker creates a new health checker.
 // cloud: the cloud object implementing SingleHealthCheck.
 // defaultHealthCheckPath: is the HTTP path to use for health checks.
-func NewHealthChecker(cloud SingleHealthCheck, defaultHealthCheckPath string) HealthChecker {
-	return &HealthChecks{cloud, defaultHealthCheckPath, utils.Namer{}}
+func NewHealthChecker(cloud SingleHealthCheck, defaultHealthCheckPath string, namer utils.Namer) HealthChecker {
+	return &HealthChecks{cloud, defaultHealthCheckPath, namer}
 }
 
 // Add adds a healthcheck if one for the same port doesn't already exist.

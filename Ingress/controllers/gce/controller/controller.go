@@ -39,9 +39,8 @@ import (
 )
 
 var (
-	keyFunc             = framework.DeletionHandlingMetaNamespaceKeyFunc
-	lbControllerName    = "lbcontroller"
-	k8sAnnotationPrefix = "ingress.kubernetes.io"
+	keyFunc           = framework.DeletionHandlingMetaNamespaceKeyFunc
+	DefaultClusterUID = ""
 )
 
 // LoadBalancerController watches the kubernetes api and adds/removes services

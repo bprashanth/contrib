@@ -40,6 +40,11 @@ var (
 	testIPManager = testIP{}
 )
 
+// TODO: Use utils.Namer instead of this function.
+func defaultBackendName(clusterName string) string {
+	return fmt.Sprintf("%v-%v", backendPrefix, clusterName)
+}
+
 // newLoadBalancerController create a loadbalancer controller.
 func newLoadBalancerController(t *testing.T, cm *fakeClusterManager, masterUrl string) *LoadBalancerController {
 	client := client.NewOrDie(&client.Config{Host: masterUrl, GroupVersion: testapi.Default.GroupVersion()})
@@ -188,7 +193,7 @@ func addIngress(lbc *LoadBalancerController, ing *extensions.Ingress, pm *nodePo
 }
 
 func TestLbCreateDelete(t *testing.T) {
-	cm := NewFakeClusterManager(testClusterName)
+	cm := NewFakeClusterManager(DefaultClusterUID)
 	lbc := newLoadBalancerController(t, cm, "")
 	inputMap1 := map[string]utils.FakeIngressRuleValueMap{
 		"foo.example.com": {
@@ -260,7 +265,7 @@ func TestLbCreateDelete(t *testing.T) {
 }
 
 func TestLbFaultyUpdate(t *testing.T) {
-	cm := NewFakeClusterManager(testClusterName)
+	cm := NewFakeClusterManager(DefaultClusterUID)
 	lbc := newLoadBalancerController(t, cm, "")
 	inputMap := map[string]utils.FakeIngressRuleValueMap{
 		"foo.example.com": {
@@ -297,7 +302,7 @@ func TestLbFaultyUpdate(t *testing.T) {
 }
 
 func TestLbDefaulting(t *testing.T) {
-	cm := NewFakeClusterManager(testClusterName)
+	cm := NewFakeClusterManager(DefaultClusterUID)
 	lbc := newLoadBalancerController(t, cm, "")
 	// Make sure the controller plugs in the default values accepted by GCE.
 	ing := newIngress(map[string]utils.FakeIngressRuleValueMap{"": {"": "foo1svc"}})
@@ -315,7 +320,7 @@ func TestLbDefaulting(t *testing.T) {
 }
 
 func TestLbNoService(t *testing.T) {
-	cm := NewFakeClusterManager(testClusterName)
+	cm := NewFakeClusterManager(DefaultClusterUID)
 	lbc := newLoadBalancerController(t, cm, "")
 	inputMap := map[string]utils.FakeIngressRuleValueMap{
 		"foo.example.com": {

@@ -31,10 +31,11 @@ func newFakeLoadBalancerPool(f LoadBalancers, t *testing.T) LoadBalancerPool {
 	fakeBackends := backends.NewFakeBackendServices()
 	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
 	fakeHCs := healthchecks.NewFakeHealthChecks()
-	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/")
+	namer := utils.Namer{}
+	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/", namer)
 	backendPool := backends.NewBackendPool(
-		fakeBackends, healthChecker, instances.NewNodePool(fakeIGs))
-	return NewLoadBalancerPool(f, backendPool, utils.TestDefaultBeNodePort)
+		fakeBackends, healthChecker, instances.NewNodePool(fakeIGs), namer)
+	return NewLoadBalancerPool(f, backendPool, utils.TestDefaultBeNodePort, namer)
 }
 
 func TestCreateLoadBalancer(t *testing.T) {

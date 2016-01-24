@@ -50,13 +50,13 @@ func portKey(port int64) string {
 func NewBackendPool(
 	cloud BackendServices,
 	healthChecker healthchecks.HealthChecker,
-	nodePool instances.NodePool) *Backends {
+	nodePool instances.NodePool, namer utils.Namer) *Backends {
 	return &Backends{
 		cloud:         cloud,
 		nodePool:      nodePool,
 		snapshotter:   storage.NewInMemoryPool(),
 		healthChecker: healthChecker,
-		namer:         utils.Namer{},
+		namer:         namer,
 	}
 }
 

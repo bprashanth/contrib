@@ -26,10 +26,11 @@ import (
 )
 
 func newBackendPool(f BackendServices, fakeIGs instances.InstanceGroups) BackendPool {
+	namer := utils.Namer{}
 	return NewBackendPool(
 		f,
-		healthchecks.NewHealthChecker(healthchecks.NewFakeHealthChecks(), "/"),
-		instances.NewNodePool(fakeIGs))
+		healthchecks.NewHealthChecker(healthchecks.NewFakeHealthChecks(), "/", namer),
+		instances.NewNodePool(fakeIGs), namer)
 }
 
 func TestBackendPoolAdd(t *testing.T) {

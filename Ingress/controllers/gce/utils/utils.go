@@ -53,7 +53,7 @@ const (
 type FakeIngressRuleValueMap map[string]string
 
 type Namer struct {
-	clusterName string
+	ClusterName string
 }
 
 // BeName constructs the name for a backend.
@@ -61,10 +61,10 @@ func (n *Namer) BeName(port int64) string {
 	// TODO: Pipe the clusterName through, for now it saves code churn to just
 	// grab it globally, especially since we haven't decided how to handle
 	// namespace conflicts in the Ubernetes context.
-	if n.clusterName == "" {
+	if n.ClusterName == "" {
 		return fmt.Sprintf("%v-%d", backendPrefix, port)
 	}
-	return n.Truncate(fmt.Sprintf("%v-%d%v%v", backendPrefix, port, clusterNameDelimiter, n.clusterName))
+	return n.Truncate(fmt.Sprintf("%v-%d%v%v", backendPrefix, port, clusterNameDelimiter, n.ClusterName))
 }
 
 func (n *Namer) LBName(key string) string {
@@ -73,10 +73,10 @@ func (n *Namer) LBName(key string) string {
 	// namespace conflicts in the Ubernetes context.
 	parts := strings.Split(key, clusterNameDelimiter)
 	scrubbedName := strings.Replace(key, "/", "-", -1)
-	if n.clusterName == "" || parts[len(parts)-1] == n.clusterName {
+	if n.ClusterName == "" || parts[len(parts)-1] == n.ClusterName {
 		return scrubbedName
 	}
-	return n.Truncate(fmt.Sprintf("%v%v%v", scrubbedName, clusterNameDelimiter, n.clusterName))
+	return n.Truncate(fmt.Sprintf("%v%v%v", scrubbedName, clusterNameDelimiter, n.ClusterName))
 }
 
 // Truncate truncates the given key to a GCE length limit.
