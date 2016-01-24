@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package backends
 
 import (
 	"fmt"
@@ -25,29 +25,23 @@ import (
 
 	"github.com/golang/glog"
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
+	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/contrib/Ingress/controllers/gce/storage"
+	"k8s.io/contrib/Ingress/controllers/gce/utils"
 )
 
 // Backends implements BackendPool.
 type Backends struct {
 	cloud         BackendServices
-	nodePool      NodePool
-	healthChecker HealthChecker
+	nodePool      instances.NodePool
+	healthChecker healthchecks.HealthChecker
 	snapshotter   storage.Snapshotter
+	namer         utils.Namer
 }
 
 func portKey(port int64) string {
 	return fmt.Sprintf("%d", port)
-}
-
-func beName(port int64) string {
-	// TODO: Pipe the clusterName through, for now it saves code churn to just
-	// grab it globally, especially since we haven't decided how to handle
-	// namespace conflicts in the Ubernetes context.
-	if *clusterName == "" {
-		return fmt.Sprintf("%v-%d", backendPrefix, port)
-	}
-	return truncate(fmt.Sprintf("%v-%d%v%v", backendPrefix, port, clusterNameDelimiter, *clusterName))
 }
 
 // NewBackendPool returns a new backend pool.
@@ -55,19 +49,20 @@ func beName(port int64) string {
 // - nodePool: implements NodePool, used to create/delete new instance groups.
 func NewBackendPool(
 	cloud BackendServices,
-	healthChecker HealthChecker,
-	nodePool NodePool) *Backends {
+	healthChecker healthchecks.HealthChecker,
+	nodePool instances.NodePool) *Backends {
 	return &Backends{
 		cloud:         cloud,
 		nodePool:      nodePool,
 		snapshotter:   storage.NewInMemoryPool(),
 		healthChecker: healthChecker,
+		namer:         utils.Namer{},
 	}
 }
 
 // Get returns a single backend.
 func (b *Backends) Get(port int64) (*compute.BackendService, error) {
-	be, err := b.cloud.GetBackendService(beName(port))
+	be, err := b.cloud.GetBackendService(b.namer.BeName(port))
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +101,7 @@ func (b *Backends) create(ig *compute.InstanceGroup, namedPort *compute.NamedPor
 
 // Add will get or create a Backend for the given port.
 func (b *Backends) Add(port int64) error {
-	name := beName(port)
+	name := b.namer.BeName(port)
 
 	// Preemptive addition of a backend to the pool is only to force instance
 	// cleanup if user runs out of quota mid-way through this function, and
@@ -123,7 +118,7 @@ func (b *Backends) Add(port int64) error {
 	if be == nil {
 		glog.Infof("Creating backend for instance group %v port %v named port %v",
 			ig.Name, port, namedPort)
-		be, err = b.create(ig, namedPort, beName(port))
+		be, err = b.create(ig, namedPort, b.namer.BeName(port))
 		if err != nil {
 			return err
 		}
@@ -137,10 +132,10 @@ func (b *Backends) Add(port int64) error {
 
 // Delete deletes the Backend for the given port.
 func (b *Backends) Delete(port int64) (err error) {
-	name := beName(port)
+	name := b.namer.BeName(port)
 	glog.Infof("Deleting backend %v", name)
 	defer func() {
-		if isHTTPErrorCode(err, http.StatusNotFound) {
+		if utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 			err = nil
 		}
 		if err == nil {
@@ -151,11 +146,11 @@ func (b *Backends) Delete(port int64) (err error) {
 	// not found. This guards against the case where we create one of the
 	// other 2 and run out of quota creating the backend.
 	if err = b.cloud.DeleteBackendService(name); err != nil &&
-		!isHTTPErrorCode(err, http.StatusNotFound) {
+		!utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 		return err
 	}
 	if err = b.healthChecker.Delete(port); err != nil &&
-		!isHTTPErrorCode(err, http.StatusNotFound) {
+		!utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 		return err
 	}
 	glog.Infof("Deleting instance group %v", name)
@@ -176,7 +171,7 @@ func (b *Backends) List() (*compute.BackendServiceList, error) {
 // It fixes broken links.
 func (b *Backends) edgeHop(be *compute.BackendService, ig *compute.InstanceGroup) error {
 	if len(be.Backends) == 1 &&
-		compareLinks(be.Backends[0].Group, ig.SelfLink) {
+		utils.CompareLinks(be.Backends[0].Group, ig.SelfLink) {
 		return nil
 	}
 	glog.Infof("Backend %v has a broken edge, adding link to %v",

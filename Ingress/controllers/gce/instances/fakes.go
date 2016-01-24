@@ -8,8 +8,8 @@ import (
 	"k8s.io/kubernetes/pkg/util/sets"
 )
 
-func newFakeInstanceGroups(nodes sets.String) *fakeInstanceGroups {
-	return &fakeInstanceGroups{
+func NewFakeInstanceGroups(nodes sets.String) *FakeInstanceGroups {
+	return &FakeInstanceGroups{
 		instances:  nodes,
 		listResult: getInstanceList(nodes),
 		namer:      utils.Namer{},
@@ -17,17 +17,17 @@ func newFakeInstanceGroups(nodes sets.String) *fakeInstanceGroups {
 }
 
 // InstanceGroup fakes
-type fakeInstanceGroups struct {
+type FakeInstanceGroups struct {
 	instances      sets.String
 	instanceGroups []*compute.InstanceGroup
-	ports          []int64
+	Ports          []int64
 	getResult      *compute.InstanceGroup
 	listResult     *compute.InstanceGroupsListInstances
 	calls          []int
 	namer          utils.Namer
 }
 
-func (f *fakeInstanceGroups) GetInstanceGroup(name string) (*compute.InstanceGroup, error) {
+func (f *FakeInstanceGroups) GetInstanceGroup(name string) (*compute.InstanceGroup, error) {
 	f.calls = append(f.calls, utils.Get)
 	for _, ig := range f.instanceGroups {
 		if ig.Name == name {
@@ -38,13 +38,13 @@ func (f *fakeInstanceGroups) GetInstanceGroup(name string) (*compute.InstanceGro
 	return nil, fmt.Errorf("Instance group %v not found", name)
 }
 
-func (f *fakeInstanceGroups) CreateInstanceGroup(name string) (*compute.InstanceGroup, error) {
+func (f *FakeInstanceGroups) CreateInstanceGroup(name string) (*compute.InstanceGroup, error) {
 	newGroup := &compute.InstanceGroup{Name: name, SelfLink: name}
 	f.instanceGroups = append(f.instanceGroups, newGroup)
 	return newGroup, nil
 }
 
-func (f *fakeInstanceGroups) DeleteInstanceGroup(name string) error {
+func (f *FakeInstanceGroups) DeleteInstanceGroup(name string) error {
 	newGroups := []*compute.InstanceGroup{}
 	found := false
 	for _, ig := range f.instanceGroups {
@@ -61,24 +61,24 @@ func (f *fakeInstanceGroups) DeleteInstanceGroup(name string) error {
 	return nil
 }
 
-func (f *fakeInstanceGroups) ListInstancesInInstanceGroup(name string, state string) (*compute.InstanceGroupsListInstances, error) {
+func (f *FakeInstanceGroups) ListInstancesInInstanceGroup(name string, state string) (*compute.InstanceGroupsListInstances, error) {
 	return f.listResult, nil
 }
 
-func (f *fakeInstanceGroups) AddInstancesToInstanceGroup(name string, instanceNames []string) error {
+func (f *FakeInstanceGroups) AddInstancesToInstanceGroup(name string, instanceNames []string) error {
 	f.calls = append(f.calls, utils.AddInstances)
 	f.instances.Insert(instanceNames...)
 	return nil
 }
 
-func (f *fakeInstanceGroups) RemoveInstancesFromInstanceGroup(name string, instanceNames []string) error {
+func (f *FakeInstanceGroups) RemoveInstancesFromInstanceGroup(name string, instanceNames []string) error {
 	f.calls = append(f.calls, utils.RemoveInstances)
 	f.instances.Delete(instanceNames...)
 	return nil
 }
 
-func (f *fakeInstanceGroups) AddPortToInstanceGroup(ig *compute.InstanceGroup, port int64) (*compute.NamedPort, error) {
-	f.ports = append(f.ports, port)
+func (f *FakeInstanceGroups) AddPortToInstanceGroup(ig *compute.InstanceGroup, port int64) (*compute.NamedPort, error) {
+	f.Ports = append(f.Ports, port)
 	return &compute.NamedPort{Name: f.namer.BeName(port), Port: port}, nil
 }
 

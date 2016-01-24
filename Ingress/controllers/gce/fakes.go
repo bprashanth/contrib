@@ -21,6 +21,8 @@ import (
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/backends"
+	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
 	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/kubernetes/pkg/util/intstr"
 	"k8s.io/kubernetes/pkg/util/sets"
@@ -299,135 +301,24 @@ func newFakeLoadBalancers(name string) *fakeLoadBalancers {
 	}
 }
 
-type fakeHealthChecks struct {
-	hc []*compute.HttpHealthCheck
-}
-
-func (f *fakeHealthChecks) CreateHttpHealthCheck(hc *compute.HttpHealthCheck) error {
-	f.hc = append(f.hc, hc)
-	return nil
-}
-
-func (f *fakeHealthChecks) GetHttpHealthCheck(name string) (*compute.HttpHealthCheck, error) {
-	for _, h := range f.hc {
-		if h.Name == name {
-			return h, nil
-		}
-	}
-	return nil, fmt.Errorf("Health check %v not found.", name)
-}
-
-func (f *fakeHealthChecks) DeleteHttpHealthCheck(name string) error {
-	healthChecks := []*compute.HttpHealthCheck{}
-	exists := false
-	for _, h := range f.hc {
-		if h.Name == name {
-			exists = true
-			continue
-		}
-		healthChecks = append(healthChecks, h)
-	}
-	if !exists {
-		return fmt.Errorf("Failed to find health check %v", name)
-	}
-	f.hc = healthChecks
-	return nil
-}
-
-func newFakeHealthChecks() *fakeHealthChecks {
-	return &fakeHealthChecks{hc: []*compute.HttpHealthCheck{}}
-}
-
-// BackendServices fakes
-type fakeBackendServices struct {
-	backendServices []*compute.BackendService
-	calls           []int
-}
-
-func (f *fakeBackendServices) GetBackendService(name string) (*compute.BackendService, error) {
-	f.calls = append(f.calls, Get)
-	for i := range f.backendServices {
-		if name == f.backendServices[i].Name {
-			return f.backendServices[i], nil
-		}
-	}
-	return nil, fmt.Errorf("Backend service %v not found", name)
-}
-
-func (f *fakeBackendServices) CreateBackendService(be *compute.BackendService) error {
-	f.calls = append(f.calls, Create)
-	be.SelfLink = be.Name
-	f.backendServices = append(f.backendServices, be)
-	return nil
-}
-
-func (f *fakeBackendServices) DeleteBackendService(name string) error {
-	f.calls = append(f.calls, Delete)
-	newBackends := []*compute.BackendService{}
-	for i := range f.backendServices {
-		if name != f.backendServices[i].Name {
-			newBackends = append(newBackends, f.backendServices[i])
-		}
-	}
-	f.backendServices = newBackends
-	return nil
-}
-
-func (f *fakeBackendServices) ListBackendServices() (*compute.BackendServiceList, error) {
-	return &compute.BackendServiceList{Items: f.backendServices}, nil
-}
-
-func (f *fakeBackendServices) UpdateBackendService(be *compute.BackendService) error {
-
-	f.calls = append(f.calls, Update)
-	for i := range f.backendServices {
-		if f.backendServices[i].Name == be.Name {
-			f.backendServices[i] = be
-		}
-	}
-	return nil
-}
-
-func (f *fakeBackendServices) GetHealth(name, instanceGroupLink string) (*compute.BackendServiceGroupHealth, error) {
-	be, err := f.GetBackendService(name)
-	if err != nil {
-		return nil, err
-	}
-	states := []*compute.HealthStatus{
-		{
-			HealthState: "HEALTHY",
-			IpAddress:   "",
-			Port:        be.Port,
-		},
-	}
-	return &compute.BackendServiceGroupHealth{
-		HealthStatus: states}, nil
-}
-
-func newFakeBackendServices() *fakeBackendServices {
-	return &fakeBackendServices{
-		backendServices: []*compute.BackendService{},
-	}
-}
-
 // ClusterManager fake
 type fakeClusterManager struct {
 	*ClusterManager
 	fakeLbs      *fakeLoadBalancers
-	fakeBackends *fakeBackendServices
-	fakeIGs      *instances.fakeInstanceGroups
+	fakeBackends *backends.FakeBackendServices
+	fakeIGs      *instances.FakeInstanceGroups
 }
 
 // newFakeClusterManager creates a new fake ClusterManager.
 func newFakeClusterManager(clusterName string) *fakeClusterManager {
 	fakeLbs := newFakeLoadBalancers(clusterName)
-	fakeBackends := newFakeBackendServices()
-	fakeIGs := instances.newFakeInstanceGroups(sets.NewString())
-	fakeHCs := newFakeHealthChecks()
+	fakeBackends := backends.NewFakeBackendServices()
+	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
+	fakeHCs := backends.NewFakeHealthChecks()
 
 	nodePool := instances.NewNodePool(fakeIGs)
-	healthChecker := NewHealthChecker(fakeHCs, "/")
-	backendPool := NewBackendPool(
+	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/")
+	backendPool := backends.NewBackendPool(
 		fakeBackends,
 		healthChecker, nodePool)
 	l7Pool := NewLoadBalancerPool(

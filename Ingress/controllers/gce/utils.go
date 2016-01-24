@@ -22,6 +22,7 @@ import (
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/backends"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
@@ -289,7 +290,7 @@ func (s *StoreToIngressLister) GetServiceIngress(svc *api.Service) (ings []exten
 }
 
 // getAnnotations returns the annotations of an l7. This includes it's current status.
-func getAnnotations(l7 *L7, existing map[string]string, backendPool BackendPool) map[string]string {
+func getAnnotations(l7 *L7, existing map[string]string, backendPool backends.BackendPool) map[string]string {
 	if existing == nil {
 		existing = map[string]string{}
 	}

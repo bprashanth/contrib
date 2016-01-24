@@ -55,55 +55,6 @@ import (
 // must match their siblings in the Kubernetes cloud provider, which are in turn
 // consistent with GCE compute API, there might be inconsistencies.
 
-// NodePool is an interface to manage a pool of kubernetes nodes synced with vm instances in the cloud
-// through the InstanceGroups interface.
-type NodePool interface {
-	AddInstanceGroup(name string, port int64) (*compute.InstanceGroup, *compute.NamedPort, error)
-	DeleteInstanceGroup(name string) error
-
-	// TODO: Refactor for modularity
-	Add(groupName string, nodeNames []string) error
-	Remove(groupName string, nodeNames []string) error
-	Sync(nodeNames []string) error
-	Get(name string) (*compute.InstanceGroup, error)
-}
-
-// InstanceGroups is an interface for managing gce instances groups, and the instances therein.
-type InstanceGroups interface {
-	GetInstanceGroup(name string) (*compute.InstanceGroup, error)
-	CreateInstanceGroup(name string) (*compute.InstanceGroup, error)
-	DeleteInstanceGroup(name string) error
-
-	// TODO: Refactor for modulatiry.
-	ListInstancesInInstanceGroup(name string, state string) (*compute.InstanceGroupsListInstances, error)
-	AddInstancesToInstanceGroup(name string, instanceNames []string) error
-	RemoveInstancesFromInstanceGroup(name string, instanceName []string) error
-	AddPortToInstanceGroup(ig *compute.InstanceGroup, port int64) (*compute.NamedPort, error)
-}
-
-// BackendPool is an interface to manage a pool of kubernetes nodePort services
-// as gce backendServices, and sync them through the BackendServices interface.
-type BackendPool interface {
-	Add(port int64) error
-	Get(port int64) (*compute.BackendService, error)
-	Delete(port int64) error
-	Sync(ports []int64) error
-	GC(ports []int64) error
-	Shutdown() error
-	Status(name string) string
-	List() (*compute.BackendServiceList, error)
-}
-
-// BackendServices is an interface for managing gce backend services.
-type BackendServices interface {
-	GetBackendService(name string) (*compute.BackendService, error)
-	UpdateBackendService(bg *compute.BackendService) error
-	CreateBackendService(bg *compute.BackendService) error
-	DeleteBackendService(name string) error
-	ListBackendServices() (*compute.BackendServiceList, error)
-	GetHealth(name, instanceGroupLink string) (*compute.BackendServiceGroupHealth, error)
-}
-
 // LoadBalancers is an interface for managing all the gce resources needed by L7
 // loadbalancers. We don't have individual pools for each of these resources
 // because none of them are usable (or acquirable) stand-alone, unlinke backends

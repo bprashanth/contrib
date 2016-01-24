@@ -23,6 +23,7 @@ import (
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/utils"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/testapi"
 	"k8s.io/kubernetes/pkg/apis/extensions"
@@ -118,6 +119,7 @@ type nodePortManager struct {
 	portMap map[string]int
 	start   int
 	end     int
+	namer   utils.Namer
 }
 
 // randPort generated pseudo random port numbers.
@@ -136,7 +138,7 @@ func (p *nodePortManager) toNodePortSvcNames(inputMap map[string]fakeIngressRule
 	for host, rules := range inputMap {
 		ruleMap := fakeIngressRuleValueMap{}
 		for path, svc := range rules {
-			ruleMap[path] = beName(int64(p.portMap[svc]))
+			ruleMap[path] = p.namer.BeName(int64(p.portMap[svc]))
 		}
 		expectedMap[host] = ruleMap
 	}
@@ -144,7 +146,7 @@ func (p *nodePortManager) toNodePortSvcNames(inputMap map[string]fakeIngressRule
 }
 
 func newPortManager(st, end int) *nodePortManager {
-	return &nodePortManager{map[string]int{}, st, end}
+	return &nodePortManager{map[string]int{}, st, end, utils.Namer{}}
 }
 
 // addIngress adds an ingress to the loadbalancer controllers ingress store. If

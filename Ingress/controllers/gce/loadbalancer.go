@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/backends"
 	"k8s.io/contrib/Ingress/controllers/gce/storage"
 	"k8s.io/kubernetes/pkg/util/sets"
 
@@ -93,7 +94,7 @@ type L7s struct {
 	snapshotter storage.Snapshotter
 	// TODO: Remove this field and always ask the BackendPool using the NodePort.
 	glbcDefaultBackend     *compute.BackendService
-	defaultBackendPool     BackendPool
+	defaultBackendPool     backends.BackendPool
 	defaultBackendNodePort int64
 }
 
@@ -106,7 +107,7 @@ type L7s struct {
 //   the default backend.
 func NewLoadBalancerPool(
 	cloud LoadBalancers,
-	defaultBackendPool BackendPool,
+	defaultBackendPool backends.BackendPool,
 	defaultBackendNodePort int64) LoadBalancerPool {
 	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort}
 }

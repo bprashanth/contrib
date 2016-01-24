@@ -19,6 +19,8 @@ package main
 import (
 	"fmt"
 
+	"k8s.io/contrib/Ingress/controllers/gce/backends"
+	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
 	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	gce "k8s.io/kubernetes/pkg/cloudprovider/providers/gce"
@@ -60,8 +62,8 @@ const (
 type ClusterManager struct {
 	ClusterName            string
 	defaultBackendNodePort int64
-	instancePool           NodePool
-	backendPool            BackendPool
+	instancePool           instances.NodePool
+	backendPool            backends.BackendPool
 	l7Pool                 LoadBalancerPool
 }
 
@@ -160,11 +162,11 @@ func NewClusterManager(
 	cloud := cloudInterface.(*gce.GCECloud)
 	cluster := ClusterManager{ClusterName: name}
 	cluster.instancePool = instances.NewNodePool(cloud)
-	healthChecker := NewHealthChecker(cloud, defaultHealthCheckPath)
-	cluster.backendPool = NewBackendPool(
+	healthChecker := healthchecks.NewHealthChecker(cloud, defaultHealthCheckPath)
+	cluster.backendPool = backends.NewBackendPool(
 		cloud, healthChecker, cluster.instancePool)
-	defaultBackendHealthChecker := NewHealthChecker(cloud, "/healthz")
-	defaultBackendPool := NewBackendPool(
+	defaultBackendHealthChecker := healthchecks.NewHealthChecker(cloud, "/healthz")
+	defaultBackendPool := backends.NewBackendPool(
 		cloud, defaultBackendHealthChecker, cluster.instancePool)
 	cluster.defaultBackendNodePort = defaultBackendNodePort
 	cluster.l7Pool = NewLoadBalancerPool(
