@@ -22,6 +22,7 @@ import (
 	"k8s.io/contrib/Ingress/controllers/gce/backends"
 	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
 	"k8s.io/contrib/Ingress/controllers/gce/instances"
+	"k8s.io/contrib/Ingress/controllers/gce/loadbalancers"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	gce "k8s.io/kubernetes/pkg/cloudprovider/providers/gce"
 )
@@ -29,7 +30,6 @@ import (
 const (
 	defaultPort            = 80
 	defaultHealthCheckPath = "/"
-	defaultPortRange       = "80"
 
 	// A single instance-group is created per cluster manager.
 	// Tagged with the name of the controller.
@@ -44,9 +44,6 @@ const (
 	targetProxyPrefix    = "k8s-tp"
 	forwardingRulePrefix = "k8s-fw"
 	urlMapPrefix         = "k8s-um"
-
-	// The gce api uses the name of a path rule to match a host rule.
-	hostRulePrefix = "host"
 
 	// Used in the test RunServer method to denote a delete request.
 	deleteType = "del"
@@ -64,7 +61,7 @@ type ClusterManager struct {
 	defaultBackendNodePort int64
 	instancePool           instances.NodePool
 	backendPool            backends.BackendPool
-	l7Pool                 LoadBalancerPool
+	l7Pool                 loadbalancers.LoadBalancerPool
 }
 
 // isHealthy returns an error if the cluster manager is unhealthy.
@@ -169,7 +166,7 @@ func NewClusterManager(
 	defaultBackendPool := backends.NewBackendPool(
 		cloud, defaultBackendHealthChecker, cluster.instancePool)
 	cluster.defaultBackendNodePort = defaultBackendNodePort
-	cluster.l7Pool = NewLoadBalancerPool(
+	cluster.l7Pool = loadbalancers.NewLoadBalancerPool(
 		cloud, defaultBackendPool, defaultBackendNodePort)
 	return &cluster, nil
 }

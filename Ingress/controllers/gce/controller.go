@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/contrib/Ingress/controllers/gce/loadbalancers"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
@@ -56,7 +57,7 @@ type loadBalancerController struct {
 	recorder       record.EventRecorder
 	nodeQueue      *taskQueue
 	ingQueue       *taskQueue
-	tr             *gceTranslator
+	tr             *GCETranslator
 	stopCh         chan struct{}
 	// stopLock is used to enforce only a single call to Stop is active.
 	// Needed because we allow stopping through an http endpoint and
@@ -150,7 +151,7 @@ func NewLoadBalancerController(kubeClient *client.Client, clusterManager *Cluste
 		},
 		&api.Node{}, 0, nodeHandlers)
 
-	lbc.tr = &gceTranslator{&lbc}
+	lbc.tr = &GCETranslator{&lbc}
 	glog.Infof("Created new loadbalancer controller")
 
 	return &lbc, nil
@@ -297,7 +298,7 @@ func (lbc *loadBalancerController) sync(key string) {
 
 // updateIngressStatus updates the IP and annotations of a loadbalancer.
 // The annotations are parsed by kubectl describe.
-func (lbc *loadBalancerController) updateIngressStatus(l7 *L7, ing extensions.Ingress) error {
+func (lbc *loadBalancerController) updateIngressStatus(l7 *loadbalancers.L7, ing extensions.Ingress) error {
 	ingClient := lbc.client.Extensions().Ingress(ing.Namespace)
 
 	// Update IP through update/status endpoint
@@ -329,7 +330,7 @@ func (lbc *loadBalancerController) updateIngressStatus(l7 *L7, ing extensions.In
 	if err != nil {
 		return err
 	}
-	currIng.Annotations = getAnnotations(l7, currIng.Annotations, lbc.clusterManager.backendPool)
+	currIng.Annotations = loadbalancers.GetLBAnnotations(l7, currIng.Annotations, lbc.clusterManager.backendPool)
 	if !reflect.DeepEqual(ing.Annotations, currIng.Annotations) {
 		glog.V(3).Infof("Updating annotations of %v/%v", ing.Namespace, ing.Name)
 		if _, err := ingClient.Update(currIng); err != nil {

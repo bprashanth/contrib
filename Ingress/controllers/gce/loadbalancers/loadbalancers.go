@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package loadbalancers
 
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,67 +27,31 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	"k8s.io/contrib/Ingress/controllers/gce/backends"
 	"k8s.io/contrib/Ingress/controllers/gce/storage"
+	"k8s.io/contrib/Ingress/controllers/gce/utils"
 	"k8s.io/kubernetes/pkg/util/sets"
 
 	"github.com/golang/glog"
 )
 
 const (
-	// This is the key used to transmit the defaultBackend through a urlmap. It's
-	// not a valid subdomain, and it is a catch all path.
-	// TODO: Find a better way to transmit this, once we've decided on default
-	// backend semantics (i.e do we want a default per host, per lb etc).
-	defaultBackendKey = "DefaultBackend"
+
+	// The gce api uses the name of a path rule to match a host rule.
+	hostRulePrefix = "host"
 
 	// The host used if none is specified. It is a valid value for Host
 	// recognized by GCE.
-	defaultHost = "*"
+	DefaultHost = "*"
 
 	// The path used if none is specified. It is a valid path recognized by GCE.
-	defaultPath = "/*"
+	DefaultPath = "/*"
+
+	// A single target proxy/urlmap/forwarding rule is created per loadbalancer.
+	// Tagged with the namespace/name of the Ingress.
+	targetProxyPrefix    = "k8s-tp"
+	forwardingRulePrefix = "k8s-fw"
+	urlMapPrefix         = "k8s-um"
+	defaultPortRange     = "80"
 )
-
-// gceUrlMap is a nested map of hostname->path regex->backend
-type gceUrlMap map[string]map[string]*compute.BackendService
-
-// getDefaultBackend performs a destructive read and returns the default
-// backend of the urlmap.
-func (g gceUrlMap) getDefaultBackend() *compute.BackendService {
-	var d *compute.BackendService
-	var exists bool
-	if h, ok := g[defaultBackendKey]; ok {
-		if d, exists = h[defaultBackendKey]; exists {
-			delete(h, defaultBackendKey)
-		}
-		delete(g, defaultBackendKey)
-	}
-	return d
-}
-
-// String implements the string interface for the gceUrlMap.
-func (g gceUrlMap) String() string {
-	msg := ""
-	for host, um := range g {
-		msg += fmt.Sprintf("%v\n", host)
-		for url, be := range um {
-			msg += fmt.Sprintf("\t%v: ", url)
-			if be == nil {
-				msg += fmt.Sprintf("No backend\n")
-			} else {
-				msg += fmt.Sprintf("%v\n", be.Name)
-			}
-		}
-	}
-	return msg
-}
-
-// putDefaultBackend performs a destructive write replacing the
-// default backend of the url map with the given backend.
-func (g gceUrlMap) putDefaultBackend(d *compute.BackendService) {
-	g[defaultBackendKey] = map[string]*compute.BackendService{
-		defaultBackendKey: d,
-	}
-}
 
 // L7s implements LoadBalancerPool.
 type L7s struct {
@@ -96,6 +61,7 @@ type L7s struct {
 	glbcDefaultBackend     *compute.BackendService
 	defaultBackendPool     backends.BackendPool
 	defaultBackendNodePort int64
+	namer                  utils.Namer
 }
 
 // NewLoadBalancerPool returns a new loadbalancer pool.
@@ -109,7 +75,7 @@ func NewLoadBalancerPool(
 	cloud LoadBalancers,
 	defaultBackendPool backends.BackendPool,
 	defaultBackendNodePort int64) LoadBalancerPool {
-	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort}
+	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort, utils.Namer{}}
 }
 
 func (l *L7s) create(name string) (*L7, error) {
@@ -131,24 +97,13 @@ func (l *L7s) create(name string) (*L7, error) {
 		Name:               name,
 		cloud:              l.cloud,
 		glbcDefaultBackend: l.glbcDefaultBackend,
+		namer:              l.namer,
 	}, nil
-}
-
-func lbName(key string) string {
-	// TODO: Pipe the clusterName through, for now it saves code churn to just
-	// grab it globally, especially since we haven't decided how to handle
-	// namespace conflicts in the Ubernetes context.
-	parts := strings.Split(key, clusterNameDelimiter)
-	scrubbedName := strings.Replace(key, "/", "-", -1)
-	if *clusterName == "" || parts[len(parts)-1] == *clusterName {
-		return scrubbedName
-	}
-	return truncate(fmt.Sprintf("%v%v%v", scrubbedName, clusterNameDelimiter, *clusterName))
 }
 
 // Get returns the loadbalancer by name.
 func (l *L7s) Get(name string) (*L7, error) {
-	name = lbName(name)
+	name = l.namer.LBName(name)
 	lb, exists := l.snapshotter.Get(name)
 	if !exists {
 		return nil, fmt.Errorf("Loadbalancer %v not in pool", name)
@@ -159,7 +114,7 @@ func (l *L7s) Get(name string) (*L7, error) {
 // Add gets or creates a loadbalancer.
 // If the loadbalancer already exists, it checks that its edges are valid.
 func (l *L7s) Add(name string) (err error) {
-	name = lbName(name)
+	name = l.namer.LBName(name)
 
 	lb, _ := l.Get(name)
 	if lb == nil {
@@ -187,7 +142,7 @@ func (l *L7s) Add(name string) (err error) {
 
 // Delete deletes a loadbalancer by name.
 func (l *L7s) Delete(name string) error {
-	name = lbName(name)
+	name = l.namer.LBName(name)
 	lb, err := l.Get(name)
 	if err != nil {
 		return err
@@ -230,7 +185,7 @@ func (l *L7s) Sync(names []string) error {
 func (l *L7s) GC(names []string) error {
 	knownLoadBalancers := sets.NewString()
 	for _, n := range names {
-		knownLoadBalancers.Insert(lbName(n))
+		knownLoadBalancers.Insert(l.namer.LBName(n))
 	}
 	pool := l.snapshotter.Snapshot()
 
@@ -269,13 +224,15 @@ type L7 struct {
 	// This is the backend to use if no path rules match
 	// TODO: Expose this to users.
 	glbcDefaultBackend *compute.BackendService
+	// namer is used to compute names of the various sub-components of an L7.
+	namer utils.Namer
 }
 
 func (l *L7) checkUrlMap(backend *compute.BackendService) (err error) {
 	if l.glbcDefaultBackend == nil {
 		return fmt.Errorf("Cannot create urlmap without default backend.")
 	}
-	urlMapName := truncate(fmt.Sprintf("%v-%v", urlMapPrefix, l.Name))
+	urlMapName := l.namer.Truncate(fmt.Sprintf("%v-%v", urlMapPrefix, l.Name))
 	urlMap, _ := l.cloud.GetUrlMap(urlMapName)
 	if urlMap != nil {
 		glog.V(3).Infof("Url map %v already exists", urlMap.Name)
@@ -296,7 +253,7 @@ func (l *L7) checkProxy() (err error) {
 	if l.um == nil {
 		return fmt.Errorf("Cannot create proxy without urlmap.")
 	}
-	proxyName := truncate(fmt.Sprintf("%v-%v", targetProxyPrefix, l.Name))
+	proxyName := l.namer.Truncate(fmt.Sprintf("%v-%v", targetProxyPrefix, l.Name))
 	proxy, _ := l.cloud.GetTargetHttpProxy(proxyName)
 	if proxy == nil {
 		glog.Infof("Creating new http proxy for urlmap %v", l.um.Name)
@@ -307,7 +264,7 @@ func (l *L7) checkProxy() (err error) {
 		l.tp = proxy
 		return nil
 	}
-	if !compareLinks(proxy.UrlMap, l.um.SelfLink) {
+	if !utils.CompareLinks(proxy.UrlMap, l.um.SelfLink) {
 		glog.Infof("Proxy %v has the wrong url map, setting %v overwriting %v",
 			proxy.Name, l.um, proxy.UrlMap)
 		if err := l.cloud.SetUrlMapForTargetHttpProxy(proxy, l.um); err != nil {
@@ -323,7 +280,7 @@ func (l *L7) checkForwardingRule() (err error) {
 		return fmt.Errorf("Cannot create forwarding rule without proxy.")
 	}
 
-	forwardingRuleName := truncate(fmt.Sprintf("%v-%v", forwardingRulePrefix, l.Name))
+	forwardingRuleName := l.namer.Truncate(fmt.Sprintf("%v-%v", forwardingRulePrefix, l.Name))
 	fw, _ := l.cloud.GetGlobalForwardingRule(forwardingRuleName)
 	if fw == nil {
 		glog.Infof("Creating forwarding rule for proxy %v", l.tp.Name)
@@ -336,7 +293,7 @@ func (l *L7) checkForwardingRule() (err error) {
 		return nil
 	}
 	// TODO: If the port range and protocol don't match, recreate the rule
-	if compareLinks(fw.Target, l.tp.SelfLink) {
+	if utils.CompareLinks(fw.Target, l.tp.SelfLink) {
 		glog.Infof("Forwarding rule %v already exists", fw.Name)
 		l.fw = fw
 		return nil
@@ -417,7 +374,7 @@ func getNameForPathMatcher(hostRule string) string {
 // and remove the mapping. When a new path is added to a host (happens
 // more frequently than service deletion) we just need to lookup the 1
 // pathmatcher of the host.
-func (l *L7) UpdateUrlMap(ingressRules gceUrlMap) error {
+func (l *L7) UpdateUrlMap(ingressRules utils.GCEURLMap) error {
 	if l.um == nil {
 		return fmt.Errorf("Cannot add url without an urlmap.")
 	}
@@ -427,7 +384,7 @@ func (l *L7) UpdateUrlMap(ingressRules gceUrlMap) error {
 	// backend, it applies to all host rules as well as to the urlmap itself.
 	// If it doesn't the urlmap might have a stale default, so replace it with
 	// glbc's default backend.
-	defaultBackend := ingressRules.getDefaultBackend()
+	defaultBackend := ingressRules.GetDefaultBackend()
 	if defaultBackend != nil {
 		l.um.DefaultService = defaultBackend.SelfLink
 	} else {
@@ -500,7 +457,7 @@ func (l *L7) Cleanup() error {
 	if l.fw != nil {
 		glog.Infof("Deleting global forwarding rule %v", l.fw.Name)
 		if err := l.cloud.DeleteGlobalForwardingRule(l.fw.Name); err != nil {
-			if !isHTTPErrorCode(err, http.StatusNotFound) {
+			if !utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 				return err
 			}
 		}
@@ -509,7 +466,7 @@ func (l *L7) Cleanup() error {
 	if l.tp != nil {
 		glog.Infof("Deleting target proxy %v", l.tp.Name)
 		if err := l.cloud.DeleteTargetHttpProxy(l.tp.Name); err != nil {
-			if !isHTTPErrorCode(err, http.StatusNotFound) {
+			if !utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 				return err
 			}
 		}
@@ -518,7 +475,7 @@ func (l *L7) Cleanup() error {
 	if l.um != nil {
 		glog.Infof("Deleting url map %v", l.um.Name)
 		if err := l.cloud.DeleteUrlMap(l.um.Name); err != nil {
-			if !isHTTPErrorCode(err, http.StatusNotFound) {
+			if !utils.IsHTTPErrorCode(err, http.StatusNotFound) {
 				return err
 			}
 		}
@@ -552,4 +509,27 @@ func (l *L7) getBackendNames() []string {
 		beNames.Insert(defaultBackendName)
 	}
 	return beNames.List()
+}
+
+// GetLBAnnotations returns the annotations of an l7. This includes it's current status.
+func GetLBAnnotations(l7 *L7, existing map[string]string, backendPool backends.BackendPool) map[string]string {
+	if existing == nil {
+		existing = map[string]string{}
+	}
+	backends := l7.getBackendNames()
+	backendState := map[string]string{}
+	for _, beName := range backends {
+		backendState[beName] = backendPool.Status(beName)
+	}
+	jsonBackendState := "Unknown"
+	b, err := json.Marshal(backendState)
+	if err == nil {
+		jsonBackendState = string(b)
+	}
+	existing[fmt.Sprintf("%v/url-map", utils.K8sAnnotationPrefix)] = l7.um.Name
+	existing[fmt.Sprintf("%v/forwarding-rule", utils.K8sAnnotationPrefix)] = l7.fw.Name
+	existing[fmt.Sprintf("%v/target-proxy", utils.K8sAnnotationPrefix)] = l7.tp.Name
+	// TODO: We really want to know when a backend flipped states.
+	existing[fmt.Sprintf("%v/backends", utils.K8sAnnotationPrefix)] = jsonBackendState
+	return existing
 }

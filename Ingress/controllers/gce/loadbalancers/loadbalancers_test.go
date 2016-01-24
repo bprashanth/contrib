@@ -14,23 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package loadbalancers
 
 import (
 	"testing"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/backends"
+	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
+	"k8s.io/contrib/Ingress/controllers/gce/instances"
+	"k8s.io/contrib/Ingress/controllers/gce/utils"
+	"k8s.io/kubernetes/pkg/util/sets"
 )
 
-func newLoadBalancerPool(f LoadBalancers, t *testing.T) LoadBalancerPool {
-	cm := newFakeClusterManager("test")
-	return NewLoadBalancerPool(f, cm.backendPool, testDefaultBeNodePort)
+func newFakeLoadBalancerPool(f LoadBalancers, t *testing.T) LoadBalancerPool {
+	fakeBackends := backends.NewFakeBackendServices()
+	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
+	fakeHCs := healthchecks.NewFakeHealthChecks()
+	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/")
+	backendPool := backends.NewBackendPool(
+		fakeBackends, healthChecker, instances.NewNodePool(fakeIGs))
+	return NewLoadBalancerPool(f, backendPool, utils.TestDefaultBeNodePort)
 }
 
 func TestCreateLoadBalancer(t *testing.T) {
 	lbName := "test"
-	f := newFakeLoadBalancers(lbName)
-	pool := newLoadBalancerPool(f, t)
+	f := NewFakeLoadBalancers(lbName)
+	pool := newFakeLoadBalancerPool(f, t)
 	pool.Add(lbName)
 	l7, err := pool.Get(lbName)
 	if err != nil || l7 == nil {
@@ -52,12 +62,12 @@ func TestCreateLoadBalancer(t *testing.T) {
 }
 
 func TestUpdateUrlMap(t *testing.T) {
-	um1 := gceUrlMap{
+	um1 := utils.GCEURLMap{
 		"bar.example.com": {
 			"/bar2": &compute.BackendService{SelfLink: "bar2svc"},
 		},
 	}
-	um2 := gceUrlMap{
+	um2 := utils.GCEURLMap{
 		"foo.example.com": {
 			"/foo1": &compute.BackendService{SelfLink: "foo1svc"},
 			"/foo2": &compute.BackendService{SelfLink: "foo2svc"},
@@ -66,25 +76,25 @@ func TestUpdateUrlMap(t *testing.T) {
 			"/bar1": &compute.BackendService{SelfLink: "bar1svc"},
 		},
 	}
-	um2.putDefaultBackend(&compute.BackendService{SelfLink: "default"})
+	um2.PutDefaultBackend(&compute.BackendService{SelfLink: "default"})
 
 	lbName := "test"
-	f := newFakeLoadBalancers(lbName)
-	pool := newLoadBalancerPool(f, t)
+	f := NewFakeLoadBalancers(lbName)
+	pool := newFakeLoadBalancerPool(f, t)
 	pool.Add(lbName)
 	l7, err := pool.Get(lbName)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	for _, ir := range []gceUrlMap{um1, um2} {
+	for _, ir := range []utils.GCEURLMap{um1, um2} {
 		if err := l7.UpdateUrlMap(ir); err != nil {
 			t.Fatalf("%v", err)
 		}
 	}
 	// The final map doesn't contain /bar2
-	expectedMap := map[string]fakeIngressRuleValueMap{
-		defaultBackendKey: {
-			defaultBackendKey: "default",
+	expectedMap := map[string]utils.FakeIngressRuleValueMap{
+		utils.DefaultBackendKey: {
+			utils.DefaultBackendKey: "default",
 		},
 		"foo.example.com": {
 			"/foo1": "foo1svc",
@@ -94,5 +104,5 @@ func TestUpdateUrlMap(t *testing.T) {
 			"/bar1": "bar1svc",
 		},
 	}
-	f.checkUrlMap(t, l7, expectedMap)
+	f.CheckURLMap(t, l7, expectedMap)
 }
