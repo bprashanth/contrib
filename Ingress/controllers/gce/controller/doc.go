@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
-
 // This is the structure of the gce l7 controller:
 // apiserver <-> controller ---> pools --> cloud
 //                  |               |
@@ -50,3 +48,5 @@ package main
 // should be HTTP and Url should be URL, however because these interfaces
 // must match their siblings in the Kubernetes cloud provider, which are in turn
 // consistent with GCE compute API, there might be inconsistencies.
+
+package controller
