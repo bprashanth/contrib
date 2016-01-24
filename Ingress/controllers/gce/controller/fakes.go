@@ -14,11 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package controller
 
 import (
-	"fmt"
-
 	"k8s.io/contrib/Ingress/controllers/gce/backends"
 	"k8s.io/contrib/Ingress/controllers/gce/healthchecks"
 	"k8s.io/contrib/Ingress/controllers/gce/instances"
@@ -28,33 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/sets"
 )
 
-const (
-	// Add used to record additions in a sync pool.
-	Add = iota
-	// Remove used to record removals from a sync pool.
-	Remove
-	// Sync used to record syncs of a sync pool.
-	Sync
-	// Get used to record Get from a sync pool.
-	Get
-	// Create used to recrod creations in a sync pool.
-	Create
-	// Update used to record updates in a sync pool.
-	Update
-	// Delete used to record deltions from a sync pool.
-	Delete
-	// AddInstances used to record a call to AddInstances.
-	AddInstances
-	// RemoveInstances used to record a call to RemoveInstances.
-	RemoveInstances
-)
-
-var (
-	testBackendPort = intstr.IntOrString{Type: intstr.Int, IntVal: 80}
-	testClusterName = "testcluster"
-	testPathMap     = map[string]string{"/foo": defaultBackendName(testClusterName)}
-	testIPManager   = testIP{}
-)
+var testBackendPort = intstr.IntOrString{Type: intstr.Int, IntVal: 80}
 
 // ClusterManager fake
 type fakeClusterManager struct {
@@ -64,8 +36,8 @@ type fakeClusterManager struct {
 	fakeIGs      *instances.FakeInstanceGroups
 }
 
-// newFakeClusterManager creates a new fake ClusterManager.
-func newFakeClusterManager(clusterName string) *fakeClusterManager {
+// NewFakeClusterManager creates a new fake ClusterManager.
+func NewFakeClusterManager(clusterName string) *fakeClusterManager {
 	fakeLbs := loadbalancers.NewFakeLoadBalancers(clusterName)
 	fakeBackends := backends.NewFakeBackendServices()
 	fakeIGs := instances.NewFakeInstanceGroups(sets.NewString())
@@ -89,13 +61,4 @@ func newFakeClusterManager(clusterName string) *fakeClusterManager {
 		l7Pool:       l7Pool,
 	}
 	return &fakeClusterManager{cm, fakeLbs, fakeBackends, fakeIGs}
-}
-
-type testIP struct {
-	start int
-}
-
-func (t *testIP) ip() string {
-	t.start++
-	return fmt.Sprintf("0.0.0.%v", t.start)
 }

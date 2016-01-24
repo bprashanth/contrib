@@ -26,10 +26,12 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
+	"k8s.io/contrib/Ingress/controllers/gce/controller"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	kubectl_util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/util/wait"
 
 	"github.com/golang/glog"
 )
@@ -98,9 +100,9 @@ var (
 		`Namespace to watch for Ingress/Services/Endpoints.`)
 )
 
-func registerHandlers(lbc *loadBalancerController) {
+func registerHandlers(lbc *controller.LoadBalancerController) {
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := lbc.clusterManager.isHealthy(); err != nil {
+		if err := lbc.CloudClusterManager.IsHealthy(); err != nil {
 			w.WriteHeader(500)
 			w.Write([]byte(fmt.Sprintf("Cluster unhealthy: %v", err)))
 			return
@@ -116,7 +118,7 @@ func registerHandlers(lbc *loadBalancerController) {
 	glog.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", lbApiPort), nil))
 }
 
-func handleSigterm(lbc *loadBalancerController, deleteAll bool) {
+func handleSigterm(lbc *controller.LoadBalancerController, deleteAll bool) {
 	// Multiple SIGTERMs will get dropped
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGTERM)
@@ -138,7 +140,7 @@ func main() {
 	// TODO: Add a healthz endpoint
 	var kubeClient *client.Client
 	var err error
-	var clusterManager *ClusterManager
+	var clusterManager *controller.ClusterManager
 	flags.Parse(os.Args)
 	clientConfig := kubectl_util.DefaultClientConfig(flags)
 
@@ -180,18 +182,18 @@ func main() {
 
 	if *proxyUrl == "" && *inCluster {
 		// Create cluster manager
-		clusterManager, err = NewClusterManager(
+		clusterManager, err = controller.NewClusterManager(
 			*clusterName, defaultBackendNodePort, *healthCheckPath)
 		if err != nil {
 			glog.Fatalf("%v", err)
 		}
 	} else {
 		// Create fake cluster manager
-		clusterManager = newFakeClusterManager(*clusterName).ClusterManager
+		clusterManager = controller.NewFakeClusterManager(*clusterName).ClusterManager
 	}
 
 	// Start loadbalancer controller
-	lbc, err := NewLoadBalancerController(kubeClient, clusterManager, *resyncPeriod, *watchNamespace)
+	lbc, err := controller.NewLoadBalancerController(kubeClient, clusterManager, *resyncPeriod, *watchNamespace)
 	if err != nil {
 		glog.Fatalf("%v", err)
 	}
@@ -204,4 +206,25 @@ func main() {
 		glog.Infof("Handled quit, awaiting pod deletion.")
 		time.Sleep(30 * time.Second)
 	}
+}
+
+// getNodePort waits for the Service, and returns it's first node port.
+func getNodePort(client *client.Client, ns, name string) (nodePort int64, err error) {
+	var svc *api.Service
+	glog.Infof("Waiting for %v/%v", ns, name)
+	wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
+		svc, err = client.Services(ns).Get(name)
+		if err != nil {
+			return false, nil
+		}
+		for _, p := range svc.Spec.Ports {
+			if p.NodePort != 0 {
+				nodePort = int64(p.NodePort)
+				glog.Infof("Node port %v", nodePort)
+				break
+			}
+		}
+		return true, nil
+	})
+	return
 }

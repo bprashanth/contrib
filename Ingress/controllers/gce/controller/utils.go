@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package controller
 
 import (
 	"fmt"
@@ -26,14 +26,11 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	"k8s.io/kubernetes/pkg/client/cache"
-	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/util/intstr"
-	"k8s.io/kubernetes/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/util/workqueue"
 
 	"github.com/golang/glog"
-	"google.golang.org/api/googleapi"
 )
 
 // errorNodePortNotFound is an implementation of error.
@@ -152,47 +149,9 @@ func (s *StoreToIngressLister) GetServiceIngress(svc *api.Service) (ings []exten
 	return
 }
 
-// isHTTPErrorCode checks if the given error matches the given HTTP Error code.
-// For this to work the error must be a googleapi Error.
-func isHTTPErrorCode(err error, code int) bool {
-	apiErr, ok := err.(*googleapi.Error)
-	return ok && apiErr.Code == code
-}
-
-// getNodePort waits for the Service, and returns it's first node port.
-func getNodePort(client *client.Client, ns, name string) (nodePort int64, err error) {
-	var svc *api.Service
-	glog.Infof("Waiting for %v/%v", ns, name)
-	wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
-		svc, err = client.Services(ns).Get(name)
-		if err != nil {
-			return false, nil
-		}
-		for _, p := range svc.Spec.Ports {
-			if p.NodePort != 0 {
-				nodePort = int64(p.NodePort)
-				glog.Infof("Node port %v", nodePort)
-				break
-			}
-		}
-		return true, nil
-	})
-	return
-}
-
-// truncate truncates the given key to a GCE length limit.
-func truncate(key string) string {
-	if len(key) > nameLenLimit {
-		// GCE requires names to end with an albhanumeric, but allows characters
-		// like '-', so make sure the trucated name ends legally.
-		return fmt.Sprintf("%v%v", key[:nameLenLimit], alphaNumericChar)
-	}
-	return key
-}
-
 // GCETranslator helps with kubernetes -> gce api conversion.
 type GCETranslator struct {
-	*loadBalancerController
+	*LoadBalancerController
 }
 
 // toUrlMap converts an ingress to a map of subdomain: url-regex: gce backend.
@@ -249,7 +208,7 @@ func (t *GCETranslator) toGCEBackend(be *extensions.IngressBackend, ns string) (
 	if err != nil {
 		return nil, err
 	}
-	backend, err := t.clusterManager.backendPool.Get(int64(port))
+	backend, err := t.CloudClusterManager.backendPool.Get(int64(port))
 	if err != nil {
 		return nil, fmt.Errorf(
 			"No GCE backend exists for port %v, kube backend %+v", port, be)

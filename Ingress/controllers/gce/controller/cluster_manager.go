@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package controller
 
 import (
 	"fmt"
@@ -65,7 +65,7 @@ type ClusterManager struct {
 }
 
 // isHealthy returns an error if the cluster manager is unhealthy.
-func (c *ClusterManager) isHealthy() (err error) {
+func (c *ClusterManager) IsHealthy() (err error) {
 	// TODO: Expand on this, for now we just want to detect when the GCE client
 	// is broken.
 	_, err = c.backendPool.List()
