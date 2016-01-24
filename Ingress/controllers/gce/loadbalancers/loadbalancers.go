@@ -221,6 +221,7 @@ type L7 struct {
 	um    *compute.UrlMap
 	tp    *compute.TargetHttpProxy
 	fw    *compute.ForwardingRule
+	ip    *compute.Address
 	// This is the backend to use if no path rules match
 	// TODO: Expose this to users.
 	glbcDefaultBackend *compute.BackendService
@@ -307,6 +308,30 @@ func (l *L7) checkForwardingRule() (err error) {
 	return nil
 }
 
+func (l *L7) checkStaticIP() (err error) {
+	if l.fw == nil || l.fw.IPAddress == "" {
+		return fmt.Errorf("Will not create static IP without a forwarding rule.")
+	}
+	staticIPName := l.namer.Truncate(fmt.Sprintf("%v-%v", forwardingRulePrefix, l.Name))
+	ip, _ := l.cloud.GetGlobalStaticIP(staticIPName)
+	if ip == nil {
+		glog.Infof("Creating static ip %v", staticIPName)
+		ip, err = l.cloud.AllocateGlobalStaticIP(staticIPName, l.fw.IPAddress)
+		if err != nil {
+			if utils.IsHTTPErrorCode(err, http.StatusConflict) ||
+				utils.IsHTTPErrorCode(err, http.StatusBadRequest) {
+				glog.Infof("IP %v(%v) is already reserved, assuming it is OK to use.",
+					l.fw.IPAddress, staticIPName)
+				return nil
+			} else {
+				return err
+			}
+		}
+	}
+	l.ip = ip
+	return nil
+}
+
 func (l *L7) edgeHop() error {
 	if err := l.checkUrlMap(l.glbcDefaultBackend); err != nil {
 		return err
@@ -315,6 +340,9 @@ func (l *L7) edgeHop() error {
 		return err
 	}
 	if err := l.checkForwardingRule(); err != nil {
+		return err
+	}
+	if err := l.checkStaticIP(); err != nil {
 		return err
 	}
 	return nil
@@ -462,6 +490,15 @@ func (l *L7) Cleanup() error {
 			}
 		}
 		l.fw = nil
+	}
+	if l.ip != nil {
+		glog.Infof("Deleting static IP %v(%v)", l.ip.Name, l.ip.Address)
+		if err := l.cloud.DeleteGlobalStaticIP(l.ip.Name); err != nil {
+			if !utils.IsHTTPErrorCode(err, http.StatusNotFound) {
+				return err
+			}
+			l.ip = nil
+		}
 	}
 	if l.tp != nil {
 		glog.Infof("Deleting target proxy %v", l.tp.Name)

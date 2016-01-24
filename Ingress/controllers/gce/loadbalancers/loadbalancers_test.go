@@ -62,6 +62,10 @@ func TestCreateLoadBalancer(t *testing.T) {
 	if err != nil || fw.Target != tp.SelfLink {
 		t.Fatalf("%v", err)
 	}
+	ip, err := f.GetGlobalStaticIP(f.fwName())
+	if err != nil || ip.Address != fw.IPAddress {
+		t.Fatalf("%v", err)
+	}
 }
 
 func TestUpdateUrlMap(t *testing.T) {
