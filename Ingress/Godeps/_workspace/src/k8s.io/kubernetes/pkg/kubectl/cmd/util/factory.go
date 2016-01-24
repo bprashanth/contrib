@@ -35,9 +35,9 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/meta"
-	"k8s.io/kubernetes/pkg/api/registered"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/api/validation"
+	"k8s.io/kubernetes/pkg/apimachinery/registered"
 	"k8s.io/kubernetes/pkg/apis/extensions"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
@@ -228,6 +228,8 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 					return "", fmt.Errorf("the service has no pod selector set")
 				}
 				return kubectl.MakeLabels(t.Spec.Selector), nil
+			case *extensions.Deployment:
+				return kubectl.MakeLabels(t.Spec.Selector), nil
 			default:
 				gvk, err := api.Scheme.ObjectKind(object)
 				if err != nil {
@@ -245,6 +247,8 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 				return getPorts(t.Spec), nil
 			case *api.Service:
 				return getServicePorts(t.Spec), nil
+			case *extensions.Deployment:
+				return getPorts(t.Spec.Template.Spec), nil
 			default:
 				gvk, err := api.Scheme.ObjectKind(object)
 				if err != nil {
@@ -320,7 +324,7 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 			if err != nil {
 				return nil, err
 			}
-			return client.SwaggerSchema(version)
+			return client.Discovery().SwaggerSchema(version)
 		},
 		DefaultNamespace: func() (string, bool, error) {
 			return clientConfig.Namespace()
@@ -330,7 +334,7 @@ func NewFactory(optionalClientConfig clientcmd.ClientConfig) *Factory {
 		},
 		CanBeExposed: func(kind unversioned.GroupKind) error {
 			switch kind {
-			case api.Kind("ReplicationController"), api.Kind("Service"), api.Kind("Pod"):
+			case api.Kind("ReplicationController"), api.Kind("Service"), api.Kind("Pod"), extensions.Kind("Deployment"):
 				// nothing to do here
 			default:
 				return fmt.Errorf("cannot expose a %s", kind)
@@ -672,4 +676,11 @@ func (f *Factory) NilClientMapperForCommand() resource.ClientMapper {
 	return resource.ClientMapperFunc(func(mapping *meta.RESTMapping) (resource.RESTClient, error) {
 		return nil, nil
 	})
+}
+
+// One stop shopping for a Builder
+func (f *Factory) NewBuilder() *resource.Builder {
+	mapper, typer := f.Object()
+
+	return resource.NewBuilder(mapper, typer, f.ClientMapperForCommand())
 }
