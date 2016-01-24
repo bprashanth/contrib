@@ -19,6 +19,7 @@ package main
 import (
 	"testing"
 
+	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/kubernetes/pkg/util/sets"
 )
 
@@ -26,7 +27,7 @@ func newBackendPool(f BackendServices, fakeIGs InstanceGroups) BackendPool {
 	return NewBackendPool(
 		f,
 		NewHealthChecker(newFakeHealthChecks(), "/"),
-		NewNodePool(fakeIGs))
+		instances.NewNodePool(fakeIGs))
 }
 
 func TestBackendPoolAdd(t *testing.T) {

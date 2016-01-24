@@ -25,6 +25,7 @@ import (
 
 	"github.com/golang/glog"
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/storage"
 )
 
 // Backends implements BackendPool.
@@ -32,7 +33,7 @@ type Backends struct {
 	cloud         BackendServices
 	nodePool      NodePool
 	healthChecker HealthChecker
-	pool          *poolStore
+	snapshotter   storage.Snapshotter
 }
 
 func portKey(port int64) string {
@@ -59,7 +60,7 @@ func NewBackendPool(
 	return &Backends{
 		cloud:         cloud,
 		nodePool:      nodePool,
-		pool:          newPoolStore(),
+		snapshotter:   storage.NewInMemoryPool(),
 		healthChecker: healthChecker,
 	}
 }
@@ -70,7 +71,7 @@ func (b *Backends) Get(port int64) (*compute.BackendService, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.pool.Add(portKey(port), be)
+	b.snapshotter.Add(portKey(port), be)
 	return be, nil
 }
 
@@ -112,7 +113,7 @@ func (b *Backends) Add(port int64) error {
 	// decides to delete Ingress. A better solutions is to have the node pool
 	// cleaup after itself.
 	be := &compute.BackendService{}
-	defer func() { b.pool.Add(portKey(port), be) }()
+	defer func() { b.snapshotter.Add(portKey(port), be) }()
 
 	ig, namedPort, err := b.nodePool.AddInstanceGroup(name, port)
 	if err != nil {
@@ -143,7 +144,7 @@ func (b *Backends) Delete(port int64) (err error) {
 			err = nil
 		}
 		if err == nil {
-			b.pool.Delete(portKey(port))
+			b.snapshotter.Delete(portKey(port))
 		}
 	}()
 	// Try deleting health checks and instance groups, even if a backend is
@@ -208,7 +209,7 @@ func (b *Backends) GC(svcNodePorts []int64) error {
 	for _, port := range svcNodePorts {
 		knownPorts.Insert(portKey(port))
 	}
-	pool := b.pool.snapshot()
+	pool := b.snapshotter.Snapshot()
 	for port := range pool {
 		p, err := strconv.Atoi(port)
 		if err != nil {

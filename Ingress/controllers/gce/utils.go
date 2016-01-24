@@ -106,28 +106,6 @@ func NewTaskQueue(syncFn func(string)) *taskQueue {
 	}
 }
 
-// poolStore is used as a cache for cluster resource pools.
-type poolStore struct {
-	cache.ThreadSafeStore
-}
-
-// Returns a read only copy of the k:v pairs in the store.
-// Caller beware: Violates traditional snapshot guarantees.
-func (p *poolStore) snapshot() map[string]interface{} {
-	snap := map[string]interface{}{}
-	for _, key := range p.ListKeys() {
-		if item, ok := p.Get(key); ok {
-			snap[key] = item
-		}
-	}
-	return snap
-}
-
-func newPoolStore() *poolStore {
-	return &poolStore{
-		cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{})}
-}
-
 // compareLinks returns true if the 2 self links are equal.
 func compareLinks(l1, l2 string) bool {
 	// TODO: These can be partial links

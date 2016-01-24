@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	compute "google.golang.org/api/compute/v1"
+	"k8s.io/contrib/Ingress/controllers/gce/storage"
 	"k8s.io/kubernetes/pkg/util/sets"
 
 	"github.com/golang/glog"
@@ -88,8 +89,8 @@ func (g gceUrlMap) putDefaultBackend(d *compute.BackendService) {
 
 // L7s implements LoadBalancerPool.
 type L7s struct {
-	cloud LoadBalancers
-	pool  *poolStore
+	cloud       LoadBalancers
+	snapshotter storage.Snapshotter
 	// TODO: Remove this field and always ask the BackendPool using the NodePort.
 	glbcDefaultBackend     *compute.BackendService
 	defaultBackendPool     BackendPool
@@ -107,7 +108,7 @@ func NewLoadBalancerPool(
 	cloud LoadBalancers,
 	defaultBackendPool BackendPool,
 	defaultBackendNodePort int64) LoadBalancerPool {
-	return &L7s{cloud, newPoolStore(), nil, defaultBackendPool, defaultBackendNodePort}
+	return &L7s{cloud, storage.NewInMemoryPool(), nil, defaultBackendPool, defaultBackendNodePort}
 }
 
 func (l *L7s) create(name string) (*L7, error) {
@@ -147,7 +148,7 @@ func lbName(key string) string {
 // Get returns the loadbalancer by name.
 func (l *L7s) Get(name string) (*L7, error) {
 	name = lbName(name)
-	lb, exists := l.pool.Get(name)
+	lb, exists := l.snapshotter.Get(name)
 	if !exists {
 		return nil, fmt.Errorf("Loadbalancer %v not in pool", name)
 	}
@@ -170,7 +171,7 @@ func (l *L7s) Add(name string) (err error) {
 	// Add the lb to the pool, in case we create an UrlMap but run out
 	// of quota in creating the ForwardingRule we still need to cleanup
 	// the UrlMap during GC.
-	defer l.pool.Add(name, lb)
+	defer l.snapshotter.Add(name, lb)
 
 	// Why edge hop for the create?
 	// The loadbalancer is a fictitious resource, it doesn't exist in gce. To
@@ -194,7 +195,7 @@ func (l *L7s) Delete(name string) error {
 	if err := lb.Cleanup(); err != nil {
 		return err
 	}
-	l.pool.Delete(lb.Name)
+	l.snapshotter.Delete(lb.Name)
 	return nil
 }
 
@@ -230,7 +231,7 @@ func (l *L7s) GC(names []string) error {
 	for _, n := range names {
 		knownLoadBalancers.Insert(lbName(n))
 	}
-	pool := l.pool.snapshot()
+	pool := l.snapshotter.Snapshot()
 
 	// Delete unknown loadbalancers
 	for name := range pool {

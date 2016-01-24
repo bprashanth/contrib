@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 
+	"k8s.io/contrib/Ingress/controllers/gce/instances"
 	"k8s.io/kubernetes/pkg/cloudprovider"
 	gce "k8s.io/kubernetes/pkg/cloudprovider/providers/gce"
 )
@@ -44,9 +45,6 @@ const (
 
 	// The gce api uses the name of a path rule to match a host rule.
 	hostRulePrefix = "host"
-
-	// State string required by gce library to list all instances.
-	allInstances = "ALL"
 
 	// Used in the test RunServer method to denote a delete request.
 	deleteType = "del"
@@ -161,7 +159,7 @@ func NewClusterManager(
 	}
 	cloud := cloudInterface.(*gce.GCECloud)
 	cluster := ClusterManager{ClusterName: name}
-	cluster.instancePool = NewNodePool(cloud)
+	cluster.instancePool = instances.NewNodePool(cloud)
 	healthChecker := NewHealthChecker(cloud, defaultHealthCheckPath)
 	cluster.backendPool = NewBackendPool(
 		cloud, healthChecker, cluster.instancePool)
