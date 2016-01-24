@@ -955,6 +955,38 @@ func (gce *GCECloud) deleteStaticIP(name, region string) error {
 	return nil
 }
 
+// Global static IP management
+
+// AllocateGlobalStaticIP creates a global static IP.
+// Caller is allocated a random IP if they do not specify an ipAddress. If an
+// ipAddress is specified, it must belong to the current project, eg: an
+// ephemeral IP associated with a global forwarding rule.
+func (gce *GCECloud) AllocateGlobalStaticIP(name, ipAddress string) (address *compute.Address, err error) {
+	op, err := gce.service.GlobalAddresses.Insert(gce.projectID, &compute.Address{Name: name, Address: ipAddress}).Do()
+	if err != nil {
+		return nil, err
+	}
+	if err := gce.waitForGlobalOp(op); err != nil {
+		return nil, err
+	}
+	// We have to get the address to know which IP was allocated for us.
+	return gce.service.GlobalAddresses.Get(gce.projectID, name).Do()
+}
+
+// DeleteGlobalStaticIP deletes a global static IP by name.
+func (gce *GCECloud) DeleteGlobalStaticIP(name string) error {
+	op, err := gce.service.GlobalAddresses.Delete(gce.projectID, name).Do()
+	if err != nil {
+		return err
+	}
+	return gce.waitForGlobalOp(op)
+}
+
+// GetGlobalStaticIP returns the global static IP by name.
+func (gce *GCECloud) GetGlobalStaticIP(name string) (address *compute.Address, err error) {
+	return gce.service.GlobalAddresses.Get(gce.projectID, name).Do()
+}
+
 // UrlMap management
 
 // GetUrlMap returns the UrlMap by name.
