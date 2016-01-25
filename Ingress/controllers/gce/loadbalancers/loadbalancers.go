@@ -467,7 +467,7 @@ func (l *L7) UpdateUrlMap(ingressRules utils.GCEURLMap) error {
 		// /foo rule when the first is deleted.
 		for expr, be := range urlToBackend {
 			pathMatcher.PathRules = append(
-				pathMatcher.PathRules, &compute.PathRule{[]string{expr}, be.SelfLink})
+				pathMatcher.PathRules, &compute.PathRule{Paths: []string{expr}, Service: be.SelfLink})
 		}
 	}
 	um, err := l.cloud.UpdateUrlMap(l.um)

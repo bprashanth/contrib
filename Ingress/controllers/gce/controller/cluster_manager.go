@@ -155,7 +155,11 @@ func NewClusterManager(
 	}
 	cloud := cloudInterface.(*gce.GCECloud)
 	cluster := ClusterManager{ClusterNamer: utils.Namer{name}}
-	cluster.instancePool = instances.NewNodePool(cloud)
+	zone, err := cloud.GetZone()
+	if err != nil {
+		return nil, err
+	}
+	cluster.instancePool = instances.NewNodePool(cloud, zone.FailureDomain)
 	healthChecker := healthchecks.NewHealthChecker(cloud, defaultHealthCheckPath, cluster.ClusterNamer)
 	cluster.backendPool = backends.NewBackendPool(
 		cloud, healthChecker, cluster.instancePool, cluster.ClusterNamer)

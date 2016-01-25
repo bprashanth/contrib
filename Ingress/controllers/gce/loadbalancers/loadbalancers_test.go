@@ -27,7 +27,10 @@ import (
 	"k8s.io/kubernetes/pkg/util/sets"
 )
 
-const testDefaultBeNodePort = int64(3000)
+const (
+	testDefaultBeNodePort = int64(3000)
+	defaultZone           = "default-zone"
+)
 
 func newFakeLoadBalancerPool(f LoadBalancers, t *testing.T) LoadBalancerPool {
 	fakeBackends := backends.NewFakeBackendServices()
@@ -36,7 +39,7 @@ func newFakeLoadBalancerPool(f LoadBalancers, t *testing.T) LoadBalancerPool {
 	namer := utils.Namer{}
 	healthChecker := healthchecks.NewHealthChecker(fakeHCs, "/", namer)
 	backendPool := backends.NewBackendPool(
-		fakeBackends, healthChecker, instances.NewNodePool(fakeIGs), namer)
+		fakeBackends, healthChecker, instances.NewNodePool(fakeIGs, defaultZone), namer)
 	return NewLoadBalancerPool(f, backendPool, testDefaultBeNodePort, namer)
 }
 

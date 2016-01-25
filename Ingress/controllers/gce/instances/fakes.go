@@ -27,7 +27,7 @@ type FakeInstanceGroups struct {
 	namer          utils.Namer
 }
 
-func (f *FakeInstanceGroups) GetInstanceGroup(name string) (*compute.InstanceGroup, error) {
+func (f *FakeInstanceGroups) GetInstanceGroup(name, zone string) (*compute.InstanceGroup, error) {
 	f.calls = append(f.calls, utils.Get)
 	for _, ig := range f.instanceGroups {
 		if ig.Name == name {
@@ -38,13 +38,13 @@ func (f *FakeInstanceGroups) GetInstanceGroup(name string) (*compute.InstanceGro
 	return nil, fmt.Errorf("Instance group %v not found", name)
 }
 
-func (f *FakeInstanceGroups) CreateInstanceGroup(name string) (*compute.InstanceGroup, error) {
+func (f *FakeInstanceGroups) CreateInstanceGroup(name, zone string) (*compute.InstanceGroup, error) {
 	newGroup := &compute.InstanceGroup{Name: name, SelfLink: name}
 	f.instanceGroups = append(f.instanceGroups, newGroup)
 	return newGroup, nil
 }
 
-func (f *FakeInstanceGroups) DeleteInstanceGroup(name string) error {
+func (f *FakeInstanceGroups) DeleteInstanceGroup(name, zone string) error {
 	newGroups := []*compute.InstanceGroup{}
 	found := false
 	for _, ig := range f.instanceGroups {
@@ -61,17 +61,17 @@ func (f *FakeInstanceGroups) DeleteInstanceGroup(name string) error {
 	return nil
 }
 
-func (f *FakeInstanceGroups) ListInstancesInInstanceGroup(name string, state string) (*compute.InstanceGroupsListInstances, error) {
+func (f *FakeInstanceGroups) ListInstancesInInstanceGroup(name, zone string, state string) (*compute.InstanceGroupsListInstances, error) {
 	return f.listResult, nil
 }
 
-func (f *FakeInstanceGroups) AddInstancesToInstanceGroup(name string, instanceNames []string) error {
+func (f *FakeInstanceGroups) AddInstancesToInstanceGroup(name, zone string, instanceNames []string) error {
 	f.calls = append(f.calls, utils.AddInstances)
 	f.instances.Insert(instanceNames...)
 	return nil
 }
 
-func (f *FakeInstanceGroups) RemoveInstancesFromInstanceGroup(name string, instanceNames []string) error {
+func (f *FakeInstanceGroups) RemoveInstancesFromInstanceGroup(name, zone string, instanceNames []string) error {
 	f.calls = append(f.calls, utils.RemoveInstances)
 	f.instances.Delete(instanceNames...)
 	return nil
