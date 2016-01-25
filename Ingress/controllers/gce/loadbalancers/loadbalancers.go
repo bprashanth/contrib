@@ -47,10 +47,11 @@ const (
 
 	// A single target proxy/urlmap/forwarding rule is created per loadbalancer.
 	// Tagged with the namespace/name of the Ingress.
-	targetProxyPrefix    = "k8s-tp"
-	forwardingRulePrefix = "k8s-fw"
-	urlMapPrefix         = "k8s-um"
-	defaultPortRange     = "80"
+	targetProxyPrefix      = "k8s-tp"
+	targetHTTPSProxyPrefix = "k8s-tps"
+	forwardingRulePrefix   = "k8s-fw"
+	urlMapPrefix           = "k8s-um"
+	defaultPortRange       = "80"
 )
 
 // L7s implements LoadBalancerPool.
@@ -98,6 +99,7 @@ func (l *L7s) create(name string) (*L7, error) {
 		cloud:              l.cloud,
 		glbcDefaultBackend: l.glbcDefaultBackend,
 		namer:              l.namer,
+		SSLCert:            nil,
 	}, nil
 }
 
@@ -220,8 +222,11 @@ type L7 struct {
 	cloud LoadBalancers
 	um    *compute.UrlMap
 	tp    *compute.TargetHttpProxy
+	tps   *compute.TargetHttpsProxy
 	fw    *compute.ForwardingRule
 	ip    *compute.Address
+	// TODO: Make this a custom type that contains crt+key
+	SSLCert *compute.SslCertificate
 	// This is the backend to use if no path rules match
 	// TODO: Expose this to users.
 	glbcDefaultBackend *compute.BackendService
@@ -273,6 +278,54 @@ func (l *L7) checkProxy() (err error) {
 		}
 	}
 	l.tp = proxy
+	return nil
+}
+
+func (l *L7) checkSSLCert() (err error) {
+	l.SSLCert, err = l.cloud.GetSslCertificate("k8s-cert")
+	if err != nil {
+		return err
+	}
+	glog.Infof("Found ssl certificates associated with name: k8s-cert, link %v", l.SSLCert.SelfLink)
+	return nil
+}
+
+func (l *L7) checkHttpsProxy() (err error) {
+	if l.SSLCert == nil {
+		glog.Infof("No SSL certificates, will not create HTTPS proxy.")
+		return nil
+	}
+	if l.um == nil {
+		return fmt.Errorf("Cannot create https proxy without urlmap and ssl certs.")
+	}
+	proxyName := l.namer.Truncate(fmt.Sprintf("%v-%v", targetHTTPSProxyPrefix, l.Name))
+	proxy, _ := l.cloud.GetTargetHttpsProxy(proxyName)
+	if proxy == nil {
+		glog.Infof("Creating new https proxy for urlmap %v", l.um.Name)
+		proxy, err = l.cloud.CreateTargetHttpsProxy(l.um, l.SSLCert, proxyName)
+		if err != nil {
+			return err
+		}
+		l.tps = proxy
+		return nil
+	}
+	if !utils.CompareLinks(proxy.UrlMap, l.um.SelfLink) {
+		glog.Infof("Https proxy %v has the wrong url map, setting %v overwriting %v",
+			proxy.Name, l.um, proxy.UrlMap)
+		if err := l.cloud.SetUrlMapForTargetHttpsProxy(proxy, l.um); err != nil {
+			return err
+		}
+	}
+	cert := proxy.SslCertificates[0]
+	if !utils.CompareLinks(cert, l.SSLCert.SelfLink) {
+		glog.Infof("Https proxy %v has the wrong ssl certs, setting %v overwriting %v",
+			proxy.Name, l.SSLCert.SelfLink, cert)
+		if err := l.cloud.SetSslCertificateForTargetHttpsProxy(proxy, l.SSLCert); err != nil {
+			return err
+		}
+	}
+	glog.Infof("Created target https proxy %v", proxy.Name)
+	l.tps = proxy
 	return nil
 }
 
@@ -337,6 +390,12 @@ func (l *L7) edgeHop() error {
 		return err
 	}
 	if err := l.checkProxy(); err != nil {
+		return err
+	}
+	if err := l.checkSSLCert(); err != nil {
+		return err
+	}
+	if err := l.checkHttpsProxy(); err != nil {
 		return err
 	}
 	if err := l.checkForwardingRule(); err != nil {

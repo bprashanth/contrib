@@ -56,7 +56,7 @@ const (
 	alphaNumericChar = "0"
 
 	// Current docker image version. Only used in debug logging.
-	imageVersion = "0.5.3-staticipx"
+	imageVersion = "0.5.3-staticip-ssl"
 )
 
 var (

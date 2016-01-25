@@ -44,6 +44,16 @@ type LoadBalancers interface {
 	DeleteTargetHttpProxy(name string) error
 	SetUrlMapForTargetHttpProxy(proxy *compute.TargetHttpProxy, urlMap *compute.UrlMap) error
 
+	// TargetHttpsProxies
+	GetTargetHttpsProxy(name string) (*compute.TargetHttpsProxy, error)
+	CreateTargetHttpsProxy(urlMap *compute.UrlMap, SSLCerts *compute.SslCertificate, name string) (*compute.TargetHttpsProxy, error)
+	DeleteTargetHttpsProxy(name string) error
+	SetUrlMapForTargetHttpsProxy(proxy *compute.TargetHttpsProxy, urlMap *compute.UrlMap) error
+	SetSslCertificateForTargetHttpsProxy(proxy *compute.TargetHttpsProxy, SSLCerts *compute.SslCertificate) error
+
+	// SslCertificates
+	GetSslCertificate(name string) (*compute.SslCertificate, error)
+
 	// Static IP
 	AllocateGlobalStaticIP(name, IPAddress string) (*compute.Address, error)
 	GetGlobalStaticIP(name string) (*compute.Address, error)

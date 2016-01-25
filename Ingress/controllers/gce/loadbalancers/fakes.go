@@ -200,6 +200,7 @@ func (f *FakeLoadBalancers) DeleteTargetHttpProxy(name string) error {
 	f.Tp = tp
 	return nil
 }
+
 func (f *FakeLoadBalancers) SetUrlMapForTargetHttpProxy(proxy *compute.TargetHttpProxy, urlMap *compute.UrlMap) error {
 	for i := range f.Tp {
 		if f.Tp[i].Name == proxy.Name {
@@ -209,6 +210,28 @@ func (f *FakeLoadBalancers) SetUrlMapForTargetHttpProxy(proxy *compute.TargetHtt
 	return nil
 }
 
+// TargetHttpsProxy fakes
+func (f *FakeLoadBalancers) GetTargetHttpsProxy(name string) (*compute.TargetHttpsProxy, error) {
+	return nil, nil
+}
+
+func (f *FakeLoadBalancers) CreateTargetHttpsProxy(urlMap *compute.UrlMap, SSLCerts *compute.SslCertificate, name string) (*compute.TargetHttpsProxy, error) {
+	return nil, nil
+}
+
+func (f *FakeLoadBalancers) DeleteTargetHttpsProxy(name string) error {
+	return nil
+}
+
+func (f *FakeLoadBalancers) SetUrlMapForTargetHttpsProxy(proxy *compute.TargetHttpsProxy, urlMap *compute.UrlMap) error {
+	return nil
+}
+
+func (f *FakeLoadBalancers) SetSslCertificateForTargetHttpsProxy(proxy *compute.TargetHttpsProxy, SSLCerts *compute.SslCertificate) error {
+	return nil
+}
+
+// UrlMap fakes
 func (f *FakeLoadBalancers) CheckURLMap(t *testing.T, l7 *L7, expectedMap map[string]utils.FakeIngressRuleValueMap) {
 	um, err := f.GetUrlMap(l7.um.Name)
 	if err != nil || um == nil {
@@ -296,6 +319,11 @@ func (f *FakeLoadBalancers) DeleteGlobalStaticIP(name string) error {
 	}
 	f.IP = ip
 	return nil
+}
+
+// SslCertificate fakes
+func (f *FakeLoadBalancers) GetSslCertificate(name string) (*compute.SslCertificate, error) {
+	return nil, nil
 }
 
 // NewFakeLoadBalancers creates a fake cloud client. Name is the name
