@@ -1176,10 +1176,11 @@ func (gce *GCECloud) GetTargetHttpsProxy(name string) (*compute.TargetHttpsProxy
 }
 
 // CreateTargetHttpsProxy creates and returns a TargetHttpsProxy with the given UrlMap.
-func (gce *GCECloud) CreateTargetHttpsProxy(urlMap *compute.UrlMap, name string) (*compute.TargetHttpsProxy, error) {
+func (gce *GCECloud) CreateTargetHttpsProxy(urlMap *compute.UrlMap, sslCert *compute.SslCertificate, name string) (*compute.TargetHttpsProxy, error) {
 	proxy := &compute.TargetHttpsProxy{
-		Name:   name,
-		UrlMap: urlMap.SelfLink,
+		Name:            name,
+		UrlMap:          urlMap.SelfLink,
+		SslCertificates: []string{sslCert.SelfLink},
 	}
 	op, err := gce.service.TargetHttpsProxies.Insert(gce.projectID, proxy).Do()
 	if err != nil {
@@ -1224,6 +1225,42 @@ func (gce *GCECloud) DeleteTargetHttpsProxy(name string) error {
 // ListTargetHttpsProxies lists all TargetHttpsProxies in the project.
 func (gce *GCECloud) ListTargetHttpsProxies() (*compute.TargetHttpsProxyList, error) {
 	return gce.service.TargetHttpsProxies.List(gce.projectID).Do()
+}
+
+// SSL Certificate management
+
+// GetSslCertificate returns the UrlMap by name.
+func (gce *GCECloud) GetSslCertificate(name string) (*compute.SslCertificate, error) {
+	return gce.service.SslCertificates.Get(gce.projectID, name).Do()
+}
+
+// CreateSslCertificates creates and returns a SslCertificates with the given UrlMap.
+func (gce *GCECloud) CreateSslCertificates(SSLCerts *compute.SslCertificate) (*compute.SslCertificate, error) {
+	op, err := gce.service.SslCertificates.Insert(gce.projectID, SSLCerts).Do()
+	if err != nil {
+		return nil, err
+	}
+	if err = gce.waitForGlobalOp(op); err != nil {
+		return nil, err
+	}
+	return gce.GetSslCertificate(SSLCerts.Name)
+}
+
+// DeleteSslCertificates deletes the SslCertificates by name.
+func (gce *GCECloud) DeleteSslCertificates(name string) error {
+	op, err := gce.service.SslCertificates.Delete(gce.projectID, name).Do()
+	if err != nil {
+		if isHTTPErrorCode(err, http.StatusNotFound) {
+			return nil
+		}
+		return err
+	}
+	return gce.waitForGlobalOp(op)
+}
+
+// ListSslCertificates lists all SslCertificates in the project.
+func (gce *GCECloud) ListSslCertificates() (*compute.SslCertificateList, error) {
+	return gce.service.SslCertificates.List(gce.projectID).Do()
 }
 
 // GlobalForwardingRule management
